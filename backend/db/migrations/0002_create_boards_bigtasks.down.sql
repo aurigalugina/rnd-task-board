@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS big_task_signoffs;
+DROP TABLE IF EXISTS big_tasks;
+DROP TABLE IF EXISTS boards;

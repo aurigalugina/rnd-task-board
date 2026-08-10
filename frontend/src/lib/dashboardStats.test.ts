@@ -1,0 +1,188 @@
+import { describe, expect, it } from 'vitest';
+import { aggregateBoards, computeDashboardStats, truncateName, type BoardWithTasks } from './dashboardStats';
+import type { BigTask } from './types';
+
+function fakeBigTask(overrides: Partial<BigTask>): BigTask {
+  return {
+    id: 'bt-' + Math.random(),
+    board_id: 'board-1',
+    name: 'Tahap Analisis',
+    start_date: '2026-08-01',
+    deadline: '2026-08-20',
+    default_pic_user_id: null,
+    on_hold: false,
+    actual_pct: 0,
+    expected_pct: 0,
+    days_left: 5,
+    verdict: 'on_progress',
+    signed: false,
+    signed_by: null,
+    signed_at: null,
+    ...overrides
+  };
+}
+
+function board(boardId: string, boardName: string, bigTasks: Partial<BigTask>[]): BoardWithTasks {
+  return { boardId, boardName, bigTasks: bigTasks.map(fakeBigTask) };
+}
+
+describe('aggregateBoards', () => {
+  it('a board with zero big tasks is not_started', () => {
+    const [b] = aggregateBoards([board('b1', 'Empty Board', [])]);
+    expect(b.status).toBe('not_started');
+    expect(b.totalBigTasks).toBe(0);
+    expect(b.avgActualPct).toBe(0);
+  });
+
+  it('status is not_started only when ALL big tasks are 0% and not on hold', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ actual_pct: 0, on_hold: false }, { actual_pct: 0, on_hold: false }])]);
+    expect(b.status).toBe('not_started');
+  });
+
+  it('status is done only when ALL big tasks are signed', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ signed: true }, { signed: true }])]);
+    expect(b.status).toBe('done');
+  });
+
+  it('status is hold only when ALL (unsigned) big tasks are on_hold', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ on_hold: true }, { on_hold: true }])]);
+    expect(b.status).toBe('hold');
+  });
+
+  it('mixed status (some done, some not started) defaults to running, not done/not_started', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ signed: true, actual_pct: 100 }, { actual_pct: 0 }])]);
+    expect(b.status).toBe('running');
+  });
+
+  it('mixed status (some on_hold, some not started) defaults to running, not hold', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ on_hold: true }, { actual_pct: 0, on_hold: false }])]);
+    expect(b.status).toBe('running');
+  });
+
+  it('verdict is lose if ANY big task is lose, even when the board is otherwise fully done', () => {
+    const [b] = aggregateBoards([
+      board('b1', 'B', [
+        { signed: true, verdict: 'win' },
+        { signed: true, verdict: 'lose' }
+      ])
+    ]);
+    expect(b.status).toBe('done');
+    expect(b.verdict).toBe('lose');
+  });
+
+  it('verdict is won only when status is done AND no big task is lose', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ signed: true, verdict: 'win' }, { signed: true, verdict: 'win' }])]);
+    expect(b.verdict).toBe('won');
+  });
+
+  it('verdict is neutral when board is still running with no lose', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ actual_pct: 50 }])]);
+    expect(b.verdict).toBe('neutral');
+  });
+
+  it('averages actual_pct and expected_pct across all big tasks in the board', () => {
+    const [b] = aggregateBoards([
+      board('b1', 'B', [
+        { actual_pct: 100, expected_pct: 50 },
+        { actual_pct: 0, expected_pct: 30 }
+      ])
+    ]);
+    expect(b.avgActualPct).toBe(50);
+    expect(b.avgExpectedPct).toBe(40);
+  });
+
+  it('daysLeft is the minimum among unsigned big tasks, ignoring signed ones', () => {
+    const [b] = aggregateBoards([
+      board('b1', 'B', [
+        { signed: true, days_left: -10 },
+        { signed: false, days_left: 3 },
+        { signed: false, days_left: 8 }
+      ])
+    ]);
+    expect(b.daysLeft).toBe(3);
+  });
+
+  it('daysLeft falls back to all big tasks when every one is signed', () => {
+    const [b] = aggregateBoards([board('b1', 'B', [{ signed: true, days_left: 7 }, { signed: true, days_left: 2 }])]);
+    expect(b.daysLeft).toBe(2);
+  });
+
+  it('aggregates multiple boards independently', () => {
+    const boards = aggregateBoards([
+      board('b1', 'Board A', [{ signed: true, verdict: 'win' }]),
+      board('b2', 'Board B', [{ actual_pct: 0 }])
+    ]);
+    expect(boards).toHaveLength(2);
+    expect(boards[0].status).toBe('done');
+    expect(boards[1].status).toBe('not_started');
+  });
+});
+
+describe('computeDashboardStats', () => {
+  it('returns all zeros for an empty portfolio', () => {
+    const stats = computeDashboardStats([]);
+    expect(stats.total).toBe(0);
+    expect(stats.completionRate).toBe(0);
+    expect(stats.runningBoards).toEqual([]);
+  });
+
+  it('counts boards into status/verdict buckets', () => {
+    const boards = aggregateBoards([
+      board('b1', 'Done Board', [{ signed: true, verdict: 'win' }]),
+      board('b2', 'Not Started Board', [{ actual_pct: 0 }]),
+      board('b3', 'Running Board', [{ actual_pct: 50 }]),
+      board('b4', 'Hold Board', [{ on_hold: true }]),
+      board('b5', 'Lose Board', [{ actual_pct: 40, verdict: 'lose' }])
+    ]);
+    const stats = computeDashboardStats(boards);
+    expect(stats.total).toBe(5);
+    expect(stats.done).toBe(1);
+    expect(stats.notStarted).toBe(1);
+    expect(stats.running).toBe(2); // Running Board + Lose Board (status defaults to running)
+    expect(stats.hold).toBe(1);
+    expect(stats.won).toBe(1);
+    expect(stats.lose).toBe(1);
+  });
+
+  it('rounds completion rate to the nearest integer', () => {
+    const boards = aggregateBoards([
+      board('b1', 'A', [{ signed: true }]),
+      board('b2', 'B', [{ signed: false }]),
+      board('b3', 'C', [{ signed: false }])
+    ]);
+    expect(computeDashboardStats(boards).completionRate).toBe(33);
+  });
+
+  it('sorts nearestDeadline by daysLeft ascending and caps at 5, only among running boards', () => {
+    const boards = aggregateBoards(
+      [10, 3, 7, 1, 9, 2, 8].map((daysLeft, i) => board(`b${i}`, `B${i}`, [{ actual_pct: 50, days_left: daysLeft }]))
+    );
+    const stats = computeDashboardStats(boards);
+    expect(stats.nearestDeadline).toHaveLength(5);
+    expect(stats.nearestDeadline.map((b) => b.daysLeft)).toEqual([1, 2, 3, 7, 8]);
+  });
+
+  it('excludes not_started/done/hold boards from nearestDeadline', () => {
+    const boards = aggregateBoards([
+      board('b1', 'Done', [{ signed: true, days_left: -99 }]),
+      board('b2', 'Running', [{ actual_pct: 50, days_left: 5 }])
+    ]);
+    const stats = computeDashboardStats(boards);
+    expect(stats.nearestDeadline).toHaveLength(1);
+    expect(stats.nearestDeadline[0].boardName).toBe('Running');
+  });
+});
+
+describe('truncateName', () => {
+  it('leaves short names untouched', () => {
+    expect(truncateName('Analisis')).toBe('Analisis');
+  });
+
+  it('truncates names longer than the max length and appends an ellipsis', () => {
+    expect(truncateName('Tahap Analisis Mendalam')).toBe('Tahap Anali…');
+  });
+
+  it('respects a custom max length', () => {
+    expect(truncateName('Hello World', 5)).toBe('Hell…');
+  });
+});

@@ -1,0 +1,9 @@
+node_modules/
+build/
+.svelte-kit/
+.env
+*.log
+backend/rndops-api
+# air (docker-compose.dev.yml) -- mountpoint kosong yang kebuat di host tiap
+# stack dev nyala, isi aslinya ada di named volume, bukan di host.
+backend/tmp/
