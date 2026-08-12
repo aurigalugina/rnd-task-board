@@ -5,7 +5,16 @@
 export type Board = {
   id: string;
   name: string;
-  tag: string;
+  description: string;
+};
+
+// GET /boards/archive (super_user only) — lihat decision-log-board-archive-20260812.md.
+export type ArchivedBoard = {
+  id: string;
+  name: string;
+  description: string;
+  archived_at: string;
+  archived_by_name: string;
 };
 
 export type BoardSummary = {
@@ -38,13 +47,14 @@ export type BigTask = {
   signed: boolean;
   signed_by: string | null;
   signed_at: string | null;
+  member_user_ids: string[];
 };
 
 export type DayEntry = {
   id: string;
   entry_date: string;
   planned_text: string;
-  is_done: boolean;
+  progress_pct: number;
   blocker_text: string;
   is_weekend: boolean;
 };
@@ -68,13 +78,69 @@ export type AssignableUser = {
   roles: string[];
 };
 
+export type AccessLevel = 'super_user' | 'regular_user';
+
 export type ManagedUser = AssignableUser & {
   email: string;
+  access_level: AccessLevel;
+  hr_user_id: number | null;
 };
 
 export type Role = {
   code: string;
   label: string;
+};
+
+export type ReferensiTim = {
+  id: string;
+  name: string;
+};
+
+// Data pegawai sistem HR asli (referensi_user_hr) -- dipakai buat mapping di
+// Manajemen User, MENGGANTIKAN placeholder CRC32 di push HR. Lihat
+// docs/decision-log/decision-log-hr-mapping-super-user-20260810.md.
+export type ReferensiUserHR = {
+  hr_user_id: number;
+  email: string;
+  nip: string;
+  nama_lengkap: string;
+};
+
+export type TeamStatusRow = {
+  user_id: string;
+  display_name: string;
+  initials: string;
+  total_daily_tasks: number;
+  pushed_daily_tasks: number;
+  all_pushed: boolean;
+};
+
+export type UserProgressSummary = {
+  user_id: string;
+  belum: number;
+  on_progress: number;
+  selesai: number;
+  completion_rate: number;
+};
+
+export type InAppAlert = {
+  type: 'sign_off_ready' | 'verdict_lose' | 'deadline_soon';
+  big_task_id: string;
+  big_task_name: string;
+  board_name: string;
+  days_left: number;
+  actual_pct: number;
+  expected_pct: number;
+};
+
+export type NotificationSettings = {
+  telegram_chat_id: string;
+  telegram_thread_id: string;
+  deadline_threshold_days: number;
+  cooldown_hours: number;
+  notify_sign_off_ready: boolean;
+  notify_verdict_lose: boolean;
+  notify_deadline_soon: boolean;
 };
 
 export type CheatSheetItem = {
@@ -93,5 +159,20 @@ export type Comment = {
   daily_task_id: string | null;
   author_id: string;
   body: string;
+  created_at: string;
+};
+
+export type CRStatus = 'pending' | 'approved' | 'rejected' | 'scheduled';
+
+export type ChangeRequest = {
+  id: string;
+  submitted_by: string;
+  submitted_by_name: string;
+  raw_conversation: string;
+  structured_doc_path: string | null;
+  status: CRStatus;
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
   created_at: string;
 };

@@ -8,6 +8,13 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
+// Dibutuhkan buat menyusun URL WebSocket ke chat proxy — browser WebSocket tak
+// bisa nyetel header Authorization, jadi token dikirim via query ?access_token=
+// (divalidasi backend chatproxy). Lihat lib/chatClient.ts.
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   // FormData (upload multipart) harus TANPA Content-Type manual — browser yang
   // set header itu sendiri termasuk boundary-nya, kalau di-override jadi rusak.
@@ -45,6 +52,8 @@ export const api = {
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   upload: <T>(path: string, formData: FormData) => request<T>(path, { method: 'POST', body: formData })
 };

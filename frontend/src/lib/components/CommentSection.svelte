@@ -34,8 +34,11 @@
   $: mentionSuggestions =
     query !== null ? assignableUsers.filter((u) => u.display_name.toLowerCase().startsWith(query.toLowerCase())) : [];
 
-  async function load() {
-    loading = true;
+  // silent: dipakai buat refresh SETELAH kirim komentar -- kalau loading
+  // di-toggle, {#if loading} bikin seluruh daftar komentar flash "Memuat"
+  // tiap kali (kerasa kayak "refresh" walau SPA, dilaporkan user 2026-08-10).
+  async function load({ silent = false }: { silent?: boolean } = {}) {
+    if (!silent) loading = true;
     try {
       const [c, users] = await Promise.all([
         api.get<Comment[]>(`/big-tasks/${bigTaskId}/comments?scope=all`),
@@ -46,11 +49,11 @@
     } catch (e) {
       error = (e as Error).message;
     } finally {
-      loading = false;
+      if (!silent) loading = false;
     }
   }
 
-  onMount(load);
+  onMount(() => load());
 
   $: if (jumpToken > 0) jumpTo(jumpScope);
 
@@ -91,7 +94,7 @@
         body: text.trim()
       });
       text = '';
-      await load();
+      await load({ silent: true });
     } catch (e) {
       error = (e as Error).message;
     } finally {

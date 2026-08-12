@@ -13,8 +13,11 @@
 
   $: authorById = Object.fromEntries(assignableUsers.map((u) => [u.id, u]));
 
-  async function load() {
-    loading = true;
+  // silent: dipakai buat refresh SETELAH nambah referensi -- kalau loading
+  // di-toggle, {#if loading} bikin seluruh daftar referensi flash "Memuat"
+  // tiap kali (kerasa kayak "refresh" walau SPA, dilaporkan user 2026-08-10).
+  async function load({ silent = false }: { silent?: boolean } = {}) {
+    if (!silent) loading = true;
     try {
       const [list, users] = await Promise.all([
         api.get<CheatSheetItem[]>(`/boards/${boardId}/cheat-sheet`),
@@ -25,11 +28,11 @@
     } catch (e) {
       error = (e as Error).message;
     } finally {
-      loading = false;
+      if (!silent) loading = false;
     }
   }
 
-  onMount(load);
+  onMount(() => load());
 
   let showAdd = false;
   let type: 'note' | 'url' | 'file' = 'note';
@@ -74,7 +77,7 @@
       }
       await api.post(`/boards/${boardId}/cheat-sheet`, { type, title: title.trim(), value: finalValue });
       reset();
-      await load();
+      await load({ silent: true });
     } catch (e) {
       saveError = (e as Error).message;
     } finally {

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -16,8 +17,9 @@ import (
 type contextKey string
 
 const (
-	userIDKey contextKey = "userID"
-	rolesKey  contextKey = "roles"
+	userIDKey      contextKey = "userID"
+	rolesKey       contextKey = "roles"
+	accessLevelKey contextKey = "accessLevel"
 )
 
 const (
@@ -50,11 +52,15 @@ func secureCookies() bool {
 	return os.Getenv("APP_ENV") == "production"
 }
 
-func issueAccessToken(userID string, roles []string) (string, error) {
+// issueAccessToken menyisipkan access_level ('super_user'/'regular_user') di
+// samping roles -- konsep terpisah dari roles many-to-many, lihat
+// docs/decision-log/decision-log-hr-mapping-super-user-20260810.md.
+func issueAccessToken(userID string, roles []string, accessLevel string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":   userID,
-		"roles": roles,
-		"exp":   time.Now().Add(accessTokenTTL).Unix(),
+		"sub":          userID,
+		"roles":        roles,
+		"access_level": accessLevel,
+		"exp":          time.Now().Add(accessTokenTTL).Unix(),
 	})
 	return token.SignedString(jwtSecret())
 }
@@ -129,10 +135,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userID, passwordHash, displayName, initials, orgTeam string
+	var userID, passwordHash, displayName, initials, orgTeam, accessLevel string
 	err := h.db.QueryRow(r.Context(), `
-		SELECT id, password_hash, display_name, initials, org_team FROM users WHERE email = $1
-	`, req.Email).Scan(&userID, &passwordHash, &displayName, &initials, &orgTeam)
+		SELECT id, password_hash, display_name, initials, org_team, access_level FROM users WHERE email = $1
+	`, req.Email).Scan(&userID, &passwordHash, &displayName, &initials, &orgTeam, &accessLevel)
 	if err != nil {
 		writeAuthError(w)
 		return
@@ -149,7 +155,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := issueAccessToken(userID, roles)
+	accessToken, err := issueAccessToken(userID, roles, accessLevel)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -169,6 +175,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			"initials":     initials,
 			"roles":        roles,
 			"org_team":     orgTeam,
+			"access_level": accessLevel,
 		},
 	})
 }
@@ -224,13 +231,73 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := issueAccessToken(userID, roles)
+	var accessLevel string
+	if err := h.db.QueryRow(r.Context(), `SELECT access_level FROM users WHERE id = $1`, userID).Scan(&accessLevel); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	accessToken, err := issueAccessToken(userID, roles, accessLevel)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken})
+}
+
+// AccessClaims adalah bentuk terurai dari access token (bukan refresh token).
+type AccessClaims struct {
+	UserID      string
+	Roles       []string
+	AccessLevel string
+}
+
+// ErrInvalidToken dikembalikan ParseAccessToken kalau token kosong, gagal
+// verifikasi tanda tangan, kedaluwarsa, atau ternyata refresh token.
+var ErrInvalidToken = errors.New("invalid access token")
+
+// ParseAccessToken memverifikasi tanda tangan + masa berlaku access token dan
+// mengurai claim-nya. Dipakai bareng oleh RequireAuth (header) dan chatproxy
+// (WS, token dari query param) — logika verifikasi terpusat & bisa ditest.
+func ParseAccessToken(tokenString string) (*AccessClaims, error) {
+	if tokenString == "" {
+		return nil, ErrInvalidToken
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		return jwtSecret(), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || claims["typ"] == "refresh" {
+		return nil, ErrInvalidToken
+	}
+	userID, _ := claims["sub"].(string)
+	if userID == "" {
+		return nil, ErrInvalidToken
+	}
+	roles := []string{}
+	if rawRoles, ok := claims["roles"].([]interface{}); ok {
+		for _, rr := range rawRoles {
+			if code, ok := rr.(string); ok {
+				roles = append(roles, code)
+			}
+		}
+	}
+	accessLevel, _ := claims["access_level"].(string)
+	return &AccessClaims{UserID: userID, Roles: roles, AccessLevel: accessLevel}, nil
+}
+
+// ContextWithClaims menyisipkan userID + roles + accessLevel ke context, sama
+// seperti yang dilakukan RequireAuth — supaya handler downstream bisa pakai
+// UserIDFromContext/RolesFromContext meski auth-nya lewat jalur lain (WS proxy).
+func ContextWithClaims(ctx context.Context, c *AccessClaims) context.Context {
+	ctx = context.WithValue(ctx, userIDKey, c.UserID)
+	ctx = context.WithValue(ctx, rolesKey, c.Roles)
+	ctx = context.WithValue(ctx, accessLevelKey, c.AccessLevel)
+	return ctx
 }
 
 // RequireAuth adalah middleware chi yang memvalidasi JWT dari header Authorization
@@ -242,35 +309,12 @@ func RequireAuth(next http.Handler) http.Handler {
 			writeAuthError(w)
 			return
 		}
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-			return jwtSecret(), nil
-		})
-		if err != nil || !token.Valid {
+		claims, err := ParseAccessToken(strings.TrimPrefix(authHeader, "Bearer "))
+		if err != nil {
 			writeAuthError(w)
 			return
 		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || claims["typ"] == "refresh" {
-			writeAuthError(w)
-			return
-		}
-
-		userID, _ := claims["sub"].(string)
-		roles := []string{}
-		if rawRoles, ok := claims["roles"].([]interface{}); ok {
-			for _, rr := range rawRoles {
-				if code, ok := rr.(string); ok {
-					roles = append(roles, code)
-				}
-			}
-		}
-
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
-		ctx = context.WithValue(ctx, rolesKey, roles)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r.WithContext(ContextWithClaims(r.Context(), claims)))
 	})
 }
 
@@ -304,4 +348,17 @@ func UserIDFromContext(ctx context.Context) string {
 func RolesFromContext(ctx context.Context) []string {
 	roles, _ := ctx.Value(rolesKey).([]string)
 	return roles
+}
+
+// AccessLevelFromContext mengambil access_level ('super_user'/'regular_user')
+// yang disisipkan RequireAuth -- konsep terpisah dari roles, lihat
+// docs/decision-log/decision-log-hr-mapping-super-user-20260810.md.
+func AccessLevelFromContext(ctx context.Context) string {
+	level, _ := ctx.Value(accessLevelKey).(string)
+	return level
+}
+
+// IsSuperUser adalah shorthand AccessLevelFromContext(ctx) == "super_user".
+func IsSuperUser(ctx context.Context) bool {
+	return AccessLevelFromContext(ctx) == "super_user"
 }

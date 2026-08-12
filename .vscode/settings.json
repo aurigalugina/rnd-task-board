@@ -1,0 +1,14 @@
+{
+  // File docker-compose kita valid & jalan normal. Error "Unable to load schema
+  // from compose-spec.json" itu murni dari VS Code YAML extension (Red Hat) yang
+  // gagal DOWNLOAD schema remote dari raw.githubusercontent.com (jaringan/proxy
+  // di WSL keblok) — bukan masalah isi file. Di sini kita LEPAS asosiasi schema
+  // remote yang bermasalah itu (map ke daftar file-match kosong) supaya extension
+  // berhenti nyoba nge-fetch & error-nya hilang. Validasi YAML lain tetap jalan.
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/compose-spec/compose-go/master/schema/compose-spec.json": []
+  },
+  // Jangan tarik katalog schema dari schemastore.org (sumber lain yang juga bisa
+  // meng-asosiasikan schema compose remote & gagal di lingkungan offline/proxy).
+  "yaml.schemaStore.enable": false
+}

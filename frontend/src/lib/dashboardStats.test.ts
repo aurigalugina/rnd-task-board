@@ -18,6 +18,7 @@ function fakeBigTask(overrides: Partial<BigTask>): BigTask {
     signed: false,
     signed_by: null,
     signed_at: null,
+    member_user_ids: [],
     ...overrides
   };
 }
@@ -123,7 +124,7 @@ describe('computeDashboardStats', () => {
     const stats = computeDashboardStats([]);
     expect(stats.total).toBe(0);
     expect(stats.completionRate).toBe(0);
-    expect(stats.runningBoards).toEqual([]);
+    expect(stats.activeBoards).toEqual([]);
   });
 
   it('counts boards into status/verdict buckets', () => {
@@ -153,7 +154,7 @@ describe('computeDashboardStats', () => {
     expect(computeDashboardStats(boards).completionRate).toBe(33);
   });
 
-  it('sorts nearestDeadline by daysLeft ascending and caps at 5, only among running boards', () => {
+  it('sorts nearestDeadline by daysLeft ascending and caps at 5, among all non-done boards', () => {
     const boards = aggregateBoards(
       [10, 3, 7, 1, 9, 2, 8].map((daysLeft, i) => board(`b${i}`, `B${i}`, [{ actual_pct: 50, days_left: daysLeft }]))
     );
@@ -162,14 +163,27 @@ describe('computeDashboardStats', () => {
     expect(stats.nearestDeadline.map((b) => b.daysLeft)).toEqual([1, 2, 3, 7, 8]);
   });
 
-  it('excludes not_started/done/hold boards from nearestDeadline', () => {
+  it('excludes ONLY done boards from activeBoards/nearestDeadline -- not_started and hold still included', () => {
     const boards = aggregateBoards([
       board('b1', 'Done', [{ signed: true, days_left: -99 }]),
-      board('b2', 'Running', [{ actual_pct: 50, days_left: 5 }])
+      board('b2', 'Running', [{ actual_pct: 50, days_left: 5 }]),
+      board('b3', 'NotStarted', [{ actual_pct: 0, days_left: 20 }]),
+      board('b4', 'Hold', [{ on_hold: true, days_left: 3 }])
     ]);
     const stats = computeDashboardStats(boards);
-    expect(stats.nearestDeadline).toHaveLength(1);
-    expect(stats.nearestDeadline[0].boardName).toBe('Running');
+    expect(stats.activeBoards.map((b) => b.boardName).sort()).toEqual(['Hold', 'NotStarted', 'Running']);
+    expect(stats.nearestDeadline.map((b) => b.boardName)).not.toContain('Done');
+    expect(stats.nearestDeadline.map((b) => b.boardName)).toEqual(
+      expect.arrayContaining(['Hold', 'NotStarted', 'Running'])
+    );
+  });
+
+  it('a freshly created empty board (0 big tasks) shows up in activeBoards, not just the stat counts', () => {
+    const boards = aggregateBoards([board('b1', 'Fresh Empty Board', [])]);
+    const stats = computeDashboardStats(boards);
+    expect(stats.notStarted).toBe(1);
+    expect(stats.activeBoards).toHaveLength(1);
+    expect(stats.activeBoards[0].boardName).toBe('Fresh Empty Board');
   });
 });
 

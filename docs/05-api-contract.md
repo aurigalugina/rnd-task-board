@@ -45,10 +45,10 @@ Menggunakan cookie refresh token. Response 200: `{ "access_token": "string" }`
 ## 3. Boards
 
 ### `GET /boards`
-Response 200: `[{ "id", "name", "tag" }]`
+Response 200: `[{ "id", "name", "description" }]`. Board yang sudah di-archive TIDAK ikut muncul (`WHERE archived_at IS NULL`) — lihat §3.1.
 
 ### `POST /boards`
-Request: `{ "name": "string", "tag": "string" }`
+Request: `{ "name": "string", "description": "string" }`
 Response 201: Board object.
 
 ### `GET /boards/{board_id}/summary`
@@ -68,6 +68,21 @@ Response 200 — matriks dashboard per board:
 }
 ```
 `project_status` bernilai `"done"` hanya jika seluruh Big Task pada board tersebut ber-status signed (lihat SRS FR-BRD-07).
+
+### 3.1 Board Archive (super_user only)
+
+Lihat `docs/decision-log/decision-log-board-archive-20260812.md`. Board yang diarsipkan hilang dari `GET /boards` (Dashboard + tab Boards), tapi TETAP muncul apa adanya di `GET /weekly-plan` dan `GET /review-queue` (query di situ tidak difilter archived — laporan personal & antrean review tidak boleh "kehilangan" riwayat cuma karena project-nya diarsipkan).
+
+Ketiga endpoint di bawah CUMA bisa diakses `access_level=super_user` — 403 kalau bukan (dicek in-handler, bukan lewat middleware role).
+
+#### `GET /boards/archive`
+Response 200: `[{ "id", "name", "description", "archived_at", "archived_by_name" }]`, urut `archived_at DESC`.
+
+#### `PATCH /boards/{board_id}/archive`
+Response 204. 409 kalau board tidak ditemukan atau sudah diarsipkan.
+
+#### `PATCH /boards/{board_id}/unarchive`
+Response 204. 409 kalau board tidak ditemukan atau belum diarsipkan.
 
 ## 4. Big Tasks
 
@@ -89,15 +104,17 @@ Response 200:
     "verdict": "on_progress",
     "signed": false,
     "signed_by": null,
-    "signed_at": null
+    "signed_at": null,
+    "reviewer_user_ids": ["uuid"]
   }
 ]
 ```
 `verdict` ∈ `{ "on_progress", "win", "lose" }` — dihitung sesuai RULE-04/05/06 (BRD).
+`reviewer_user_ids` — daftar user (bisa lebih dari satu, bisa kosong) yang jadi reviewer Daily Task di bawah Big Task ini lewat Review Queue (§9). Lihat `docs/decision-log/decision-log-bigtask-reviewer-assignment-20260810.md`.
 
 ### `POST /boards/{board_id}/big-tasks`
-Request: `{ "name", "start_date", "deadline", "default_pic_user_id" }`
-Response 201: Big Task object (bentuk sama seperti di atas, `actual_pct` = 0 karena belum ada Daily Task).
+Request: `{ "name", "start_date", "deadline", "default_pic_user_id", "reviewer_user_ids": ["uuid"] }` (`reviewer_user_ids` opsional, default `[]`).
+Response 201: `{ "id": "uuid" }`.
 
 ### `POST /big-tasks/{big_task_id}/sign-off`
 Otorisasi: role `spv`. Ditolak (409) apabila `actual_pct` < 100.
@@ -126,7 +143,7 @@ Response 200:
         "id": "uuid",
         "entry_date": "2026-08-05",
         "planned_text": "string",
-        "is_done": true,
+        "progress_pct": 65,
         "blocker_text": "",
         "is_weekend": false
       }
@@ -134,6 +151,7 @@ Response 200:
   }
 ]
 ```
+`progress_pct` (0-100) — `0` = Belum, `1-99` = On Progress, `100` = Selesai (turunan murni, bukan field tersimpan terpisah). `actual_pct` Daily Task = rata-rata `progress_pct` semua `days`-nya. Menggantikan `is_done` boolean lama — lihat `docs/decision-log/decision-log-day-entry-progress-pct-20260810.md`.
 
 ### `POST /big-tasks/{big_task_id}/daily-tasks`
 Request: `{ "title", "pic_user_id", "start_date", "end_date" }`
@@ -148,10 +166,20 @@ Response 201: Daily Task object baru (bentuk sama seperti `POST /big-tasks/{big_
 ### `PATCH /day-entries/{day_entry_id}`
 Request (parsial, kirim field yang berubah saja):
 ```json
-{ "planned_text": "string", "is_done": true, "blocker_text": "string" }
+{ "planned_text": "string", "progress_pct": 65, "blocker_text": "string" }
 ```
+`progress_pct` ditolak 400 kalau di luar rentang 0-100.
 Response 200: Day Entry object terbaru (termasuk `id` — dibutuhkan klien karena inilah satu-satunya cara mendapat `day_entry_id` untuk PATCH berikutnya, lihat `id` di response `GET .../daily-tasks` §5).
-Catatan: saat `is_done` diset `true`, klien direkomendasikan mengirim `blocker_text: ""` dalam payload yang sama (selaras perilaku mockup: menandai selesai mengosongkan blocker).
+Catatan: saat `progress_pct` diset `100` (Selesai), klien direkomendasikan mengirim `blocker_text: ""` dalam payload yang sama (selaras perilaku mockup: menandai selesai mengosongkan blocker).
+
+### `POST /daily-tasks/{daily_task_id}/day-entries`
+Request: `{ "entry_date": "2026-08-10", "planned_text": "string" }` (`planned_text` opsional, default `""`).
+Response 201: Day Entry object baru (`progress_pct: 0`, `blocker_text: ""`).
+Nambah SATU baris day_entries manual di luar generate otomatis — dipakai kalau 1 tanggal mau di-breakdown jadi lebih dari satu task/rencana (`day_entries` TIDAK LAGI dibatasi satu baris per tanggal, lihat `docs/decision-log/decision-log-day-entry-add-delete-20260810.md`). `entry_date` tidak divalidasi terhadap rentang `start_date`/`end_date` Daily Task (sengaja, lihat decision log).
+
+### `DELETE /day-entries/{day_entry_id}`
+Hapus permanen satu baris day_entries (mis. hari weekend yang ke-generate otomatis tapi PIC tidak mau lembur). `actual_pct` Daily Task otomatis ikut menyesuaikan (dihitung dari SEMUA `day_entries` yang tersisa, bukan disimpan terpisah).
+Response 204.
 
 ## 6. Comments
 
@@ -204,49 +232,81 @@ Response 200:
 ```
 `last_push` bernilai `null` jika belum pernah di-push untuk minggu tersebut. Hanya Big Task dengan minimal satu Day Entry pada rentang minggu terpilih yang muncul (selaras FR-WKL-02).
 
+**Scope-nya PER USER (PIC), bukan cross-user** — "My Weekly Plan", laporan pribadi ke HR (`04-architecture.md`, `01-vision-product.md` §5 poin 3), bukan rollup tim (itu peran Dashboard). Cuma Daily Task yang `pic_user_id`-nya requesting user sendiri yang dihitung; `actual_pct`/`expected_pct` juga cuma dari Daily Task dia, BUKAN agregat semua PIC di Big Task itu (kalau satu Big Task punya beberapa PIC, Big Task itu akan muncul di Weekly Plan MASING-MASING PIC dengan angka `actual_pct` yang beda-beda sesuai kerjaan masing-masing). `POST /weekly-plan/push` ikut aturan filter yang sama, biar angka yang di-push konsisten sama yang tampil di layar. Lihat `docs/decision-log/decision-log-weekly-plan-scope-per-user-20260810.md` (sempat jadi bug — awalnya gak difilter sama sekali, ketemu & diperbaiki 2026-08-10).
+
+**Query param `as_user_id` (baru, 2026-08-10)**: `GET /weekly-plan?week_start=...&as_user_id=<uuid>` — CUMA dihormati kalau requesting user `access_level=super_user` (lihat §10), else ditolak 403 (bukan diabaikan diam-diam). Filter tetap sama (`pic_user_id`), cuma target-nya `as_user_id` bukan requester — buat super_user "lihat sebagai" user lain. Lihat `docs/decision-log/decision-log-hr-mapping-super-user-20260810.md`.
+
 ### `POST /weekly-plan/push`
-Request: `{ "big_task_id": "uuid", "week_start": "2026-08-03" }`
-Server melakukan upsert pada `weekly_push_log` berdasarkan `(big_task_id, week_start)` — generate `callback_id` baru hanya jika belum ada (FR-WKL-05).
+Request: `{ "big_task_id": "uuid", "week_start": "2026-08-03", "as_user_id"?: "uuid" }`
+Server melakukan upsert pada `weekly_push_log` berdasarkan `(big_task_id, week_start)` — generate `callback_id` baru hanya jika belum ada (FR-WKL-05). `weekly_push_log.pushed_by` SELALU actor yang benar-benar memanggil endpoint ini (buat audit), BUKAN `as_user_id` — datanya (actual_pct/expected_pct/payload HR) tetap milik target user (`as_user_id` kalau diisi, else diri sendiri).
+`as_user_id` (opsional) — sama aturannya seperti `GET /weekly-plan`: CUMA dihormati buat `access_level=super_user`, else 403.
 Response 200: `{ "callback_id": "string", "pushed_at": "timestamp" }`
+
+**Integrasi HR (Fase 2, dummy/lokal, 2026-08-10)**: setelah upsert `weekly_push_log` sukses, server BEST-EFFORT kirim HTTP POST ke `myagenda-service` (sub-project terpisah, `myagenda-service/README.md`) — upsert ke tabel `my_agenda` (skema asli sistem HR). Diatur env var `MYAGENDA_SERVICE_URL` (kosong = fitur nonaktif, di-skip diam-diam). Gagal terhubung ke service ini TIDAK membatalkan response 200 di atas — `weekly_push_log` tetap sumber kebenaran utama, sinkron HR bersifat tambahan. `user_id` yang dikirim ke `my_agenda` pakai `hr_user_id` ASLI target user kalau sudah di-mapping (lihat §10), fallback ke placeholder CRC32 (dengan warning log) kalau belum — lihat `docs/decision-log/decision-log-myagenda-hr-service-20260810.md` dan `decision-log-hr-mapping-super-user-20260810.md`.
+
+### `GET /weekly-plan/team-status?week_start=2026-08-03` (super_user only, baru 2026-08-10)
+Ditolak 403 kalau requesting user bukan `access_level=super_user`.
+Response 200: `[{ "user_id", "display_name", "initials", "total_big_tasks", "pushed_big_tasks", "all_pushed": boolean }]`
+Satu baris per user (SEMUA user, termasuk yang `total_big_tasks: 0` minggu ini) — buat kebutuhan "cek tim udah push atau belum" tanpa buka drill-down satu-satu lewat `as_user_id`. `all_pushed = total_big_tasks > 0 && pushed_big_tasks === total_big_tasks`.
 
 ## 9. Review Queue & Notifikasi
 
-Otorisasi: role `spv` saja untuk kedua endpoint di bawah — lihat `docs/decision-log/decision-log-review-queue-scope-20260809.md` untuk alasan (BRD BR-11.1 cuma menyebut kebutuhan ini untuk SPV, role lain tidak punya use case yang terdokumentasi).
+Otorisasi: SEMUA user login (bukan cuma role `spv` lagi — lihat `docs/decision-log/decision-log-bigtask-reviewer-assignment-20260810.md`, menggantikan sebagian keputusan lama di `decision-log-review-queue-scope-20260809.md`). Hasil `GET /review-queue` dan hak akses `mark-reviewed` di-filter PER USER: item tampil/bisa ditandai kalau requesting user ada di `reviewer_user_ids` Big Task terkait (§4), ATAU Big Task itu belum punya reviewer di-assign sama sekali DAN requesting user ber-role `spv` (fallback).
 
 ### `GET /review-queue`
-Mendaftar SELURUH Daily Task (lintas semua board) yang **belum** ditinjau (item_type cuma `daily_task` pada iterasi ini).
+Mendaftar Daily Task (lintas semua board) yang **belum** ditinjau DAN requesting user berwenang atasnya (lihat aturan otorisasi di atas). item_type cuma `daily_task` pada iterasi ini.
 Response 200: `[{ "type": "daily_task", "id": "uuid", "title": "string", "reviewed": false, "big_task_id": "uuid", "big_task_name": "string", "board_id": "uuid", "board_name": "string" }]`
 `big_task_id`/`big_task_name`/`board_id`/`board_name` tambahan di luar draft awal kontrak, buat konteks tampilan + link ke halaman board terkait (bukan breaking change, cuma field ekstra).
 
 ### `POST /review-queue/{item_type}/{item_id}/mark-reviewed`
-`item_type` yang didukung saat ini cuma `daily_task`. Ditolak 404 kalau `item_id` tidak ditemukan.
+`item_type` yang didukung saat ini cuma `daily_task`. Ditolak 404 kalau `item_id` tidak ditemukan, 403 kalau requesting user bukan reviewer yang berwenang atas item itu (dicek eksplisit, bukan cuma nge-trust filter di `GET`).
 Response 200: `{ "reviewed": true, "reviewed_by": "uuid", "reviewed_at": "timestamp" }`
 Tidak mengubah field progress/status entitas terkait (FR-NTF-02). Idempoten — dipanggil ulang pada item yang sama cuma update `reviewed_by`/`reviewed_at`.
 
 ## 10. Users, Roles, & Pengaturan
 
+Semua endpoint di bawah SEKARANG juga mengembalikan/menerima `access_level` (`"super_user"` | `"regular_user"`, default `"regular_user"`) dan `hr_user_id` (int atau `null`) — lihat `docs/decision-log/decision-log-hr-mapping-super-user-20260810.md`. `access_level` **konsep terpisah dari `roles`** (many-to-many) — satu user cuma salah satu dari dua nilai itu, bukan bisa dirangkap kayak role biasa.
+
 ### `GET /users` — daftar pengguna beserta role (otorisasi: admin/spv)
-Response 200: `[{ "id", "display_name", "initials", "email", "org_team", "roles": ["dev","qa"] }]`
+Response 200: `[{ "id", "display_name", "initials", "email", "org_team", "roles": ["dev","qa"], "access_level", "hr_user_id" }]`
 
 ### `POST /users` — buat pengguna baru (otorisasi: admin/spv)
-Request: `{ "display_name", "email", "password", "initials", "org_team", "role_codes": ["dev","qa"] }`
-`password` wajib — admin/SPV menentukan password awal user baru dan menyampaikannya out-of-band (lihat `docs/decision-log/decision-log-users-api-gaps-20260809.md`). Di-hash bcrypt sebelum disimpan, tidak pernah disimpan/dikembalikan plain text.
-Response 201: `{ "id", "display_name", "initials", "email", "org_team", "roles" }`
+Request: `{ "display_name", "email", "password", "initials", "org_team", "role_codes": ["dev","qa"], "access_level"?, "hr_user_id"? }`
+`password` wajib — admin/SPV menentukan password awal user baru dan menyampaikannya out-of-band (lihat `docs/decision-log/decision-log-users-api-gaps-20260809.md`). Di-hash bcrypt sebelum disimpan, tidak pernah disimpan/dikembalikan plain text. `org_team` divalidasi harus ada di `referensi_tim` (400 kalau tidak). `access_level`/`hr_user_id` opsional (default `regular_user`/`null`).
+Response 201: `{ "id", "display_name", "initials", "email", "org_team", "roles", "access_level", "hr_user_id" }`
+
+### `PATCH /users/{id}` — edit pengguna yang SUDAH ADA (otorisasi: admin/spv, baru)
+Request (parsial): `{ "org_team"?, "access_level"?, "hr_user_id"?, "clear_hr_user_id"?: boolean, "role_codes"?: ["dev","qa"] }`
+Sebelum ini TIDAK ADA cara ubah user existing (cuma `POST /users` buat bikin baru) — ditambahkan supaya admin bisa map `hr_user_id`/set `access_level`/ubah `org_team`/role ke user lama. `role_codes`, kalau dikirim, MENGGANTI SELURUH assignment role user itu (bukan menambah — klien wajib kirim daftar lengkap). `hr_user_id: null` dengan `clear_hr_user_id: true` melepas mapping HR.
+Response 200: bentuk sama seperti `GET /users` (satu object).
 
 ### `GET /users/assignable` — daftar ringkas user untuk form assignment PIC (semua pengguna terautentikasi, FR-ASG-02)
 Response 200: `[{ "id", "display_name", "initials", "org_team", "roles": ["dev","qa"] }]`
-Tanpa `email` — berbeda dari `GET /users` yang dibatasi admin/spv (lihat `docs/decision-log/decision-log-pic-assignment-endpoint-20260809.md`).
+Tanpa `email`/`access_level`/`hr_user_id` — berbeda dari `GET /users` yang dibatasi admin/spv (lihat `docs/decision-log/decision-log-pic-assignment-endpoint-20260809.md`).
 
 ### `GET /users/me` — profil milik user yang sedang login
-Response 200: `{ "id", "display_name", "initials", "email", "org_team", "roles", "theme_preference" }`
+Response 200: `{ "id", "display_name", "initials", "email", "org_team", "roles", "theme_preference", "access_level", "hr_user_id" }`
 
 ### `PATCH /users/me` — update profil sendiri
 Request (parsial): `{ "display_name", "initials", "current_password", "password", "theme_preference" }`
-`current_password` **wajib** disertakan kalau field `password` ada di request (ganti password) — ditolak 401 kalau tidak cocok dengan password saat ini. Tidak dibutuhkan untuk update field lain.
+`current_password` **wajib** disertakan kalau field `password` ada di request (ganti password) — ditolak 401 kalau tidak cocok dengan password saat ini. Tidak dibutuhkan untuk update field lain. TIDAK bisa ubah `access_level`/`hr_user_id` sendiri lewat endpoint ini (lihat `PATCH /users/{id}`, admin-only).
 Response 200: bentuk sama seperti `GET /users/me`.
 
 ### `GET /roles` — daftar role tersedia (untuk keperluan filter assignment, FR-ASG-02)
 Response 200: `[{ "code", "label" }]`
+
+### `GET /referensi-tim` — daftar tim/org (otorisasi: admin/spv, baru)
+Response 200: `[{ "id", "name" }]`
+Sumber dropdown "Tim/Org" di form user — gantiin free-text (lihat decision log). `users.org_team` TETAP kolom text apa adanya, cuma divalidasi terhadap tabel ini.
+
+### `POST /referensi-tim` — tambah nama tim baru (otorisasi: admin/spv, baru)
+Request: `{ "name" }`
+Response 201: `{ "id", "name" }`
+Bukan CRUD penuh (belum ada update/delete).
+
+### `GET /referensi-user-hr` — daftar pegawai sistem HR asli (otorisasi: admin/spv, baru)
+Response 200: `[{ "hr_user_id", "email", "nip", "nama_lengkap" }]`
+Data MILIK sistem HR eksternal, di-seed dari export yang diberikan — TIDAK ADA CRUD UI buat tabel ini (update resmi lewat migration baru). Dipakai buat mapping `users.hr_user_id` di Manajemen User.
 
 ### `POST /uploads` (multipart/form-data, field `file`)
 Dipakai oleh Cheat Sheet tipe `file`. Response: `{ "value": "string (nama file tersimpan, dipakai sebagai value cheat-sheet)" }`

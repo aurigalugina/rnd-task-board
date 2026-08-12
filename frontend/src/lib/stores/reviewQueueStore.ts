@@ -11,6 +11,7 @@ export type QueueItem = {
   type: string;
   id: string;
   title: string;
+  source_daily_task_title: string;
   reviewed: boolean;
   big_task_id: string;
   big_task_name: string;

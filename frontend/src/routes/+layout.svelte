@@ -7,6 +7,8 @@
   import { auth } from '$lib/stores/authStore';
   import { theme } from '$lib/stores/themeStore';
   import { reviewQueue, loadReviewQueue } from '$lib/stores/reviewQueueStore';
+  import { alerts, startAlertPolling, stopAlertPolling, loadAlerts } from '$lib/stores/notificationStore';
+  import { chatSession } from '$lib/stores/chatSessionStore';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import SettingsModal from '$lib/components/SettingsModal.svelte';
 
@@ -14,13 +16,24 @@
     auth.init();
   });
 
-  // Review Queue (FR-NTF-01) dibatasi role spv di backend — cuma fetch kalau
-  // user sekarang punya role itu, biar tidak nembak 403 percuma. Store dipakai
+  // Review Queue (FR-NTF-01) sekarang di-filter PER USER di backend (reviewer
+  // yang di-assign ke Big Task, atau fallback spv kalau Big Task-nya belum
+  // di-assign reviewer sama sekali) -- bukan hardcode role spv lagi, lihat
+  // decision-log-bigtask-reviewer-assignment-20260810.md. Jadi fetch buat
+  // SEMUA user yang sudah login, bukan cuma yang ber-role spv. Store dipakai
   // bareng routes/review-queue/+page.svelte supaya mark-reviewed dari halaman
   // itu langsung kepantul ke badge di sini juga (bukan cuma di halamannya).
-  $: isSpv = $auth.user?.roles.includes('spv') ?? false;
   $: pendingReview = $reviewQueue.length;
-  $: if (isSpv) loadReviewQueue();
+  $: if ($auth.status === 'authenticated') {
+    loadReviewQueue();
+    startAlertPolling();
+  }
+  $: if ($auth.status === 'unauthenticated') stopAlertPolling();
+
+  $: totalBadge = pendingReview + $alerts.length;
+
+  // Board Archive (super_user only) -- lihat decision-log-board-archive-20260812.md.
+  $: isSuperUser = $auth.user?.access_level === 'super_user';
 
   $: isLoginPage = $page.url.pathname === '/login';
   $: if ($auth.status === 'unauthenticated' && !isLoginPage) {
@@ -56,8 +69,14 @@
   function toggleNotif() {
     showNotif = !showNotif;
     showUserMenu = false;
-    if (showNotif && isSpv) loadReviewQueue();
+    if (showNotif) { loadReviewQueue(); loadAlerts(); }
   }
+
+  const alertLabel: Record<string, string> = {
+    sign_off_ready: '✅ Sign-off siap',
+    verdict_lose:   '⛔ Verdict Lose',
+    deadline_soon:  '⏰ Deadline dekat',
+  };
   function toggleUserMenu() {
     showUserMenu = !showUserMenu;
     showNotif = false;
@@ -96,34 +115,57 @@
           <a class="tab-btn {$page.url.pathname === '/weekly-plan' ? 'tab-btn-active' : ''}" href="/weekly-plan">My Weekly Plan</a>
           <a class="tab-btn {$page.url.pathname === '/review-queue' ? 'tab-btn-active' : ''}" href="/review-queue">
             Review queue
-            {#if isSpv && pendingReview > 0}<span class="review-badge">{pendingReview}</span>{/if}
+            {#if pendingReview > 0}<span class="review-badge">{pendingReview}</span>{/if}
+          </a>
+          <a
+            class="tab-btn {$page.url.pathname === '/change-requests' ? 'tab-btn-active' : ''}"
+            href="/change-requests">
+            Change request
+            {#if $chatSession.step === 'chatting'}<span class="chat-live-dot" title="Sesi chat masih aktif"></span>{/if}
           </a>
         </nav>
         <div class="topbar-right">
           <div class="notif-wrap">
             <button class="icon-only-btn" on:click={toggleNotif} aria-label="Notifikasi">
               🔔
-              {#if isSpv && pendingReview > 0}<span class="notif-badge">{pendingReview}</span>{/if}
+              {#if totalBadge > 0}<span class="notif-badge">{totalBadge}</span>{/if}
             </button>
             {#if showNotif}
-              <div class="dropdown-panel">
-                <div class="dropdown-title">Butuh atensi lo</div>
-                {#if isSpv}
-                  {#each $reviewQueue.slice(0, 5) as item (item.id)}
-                    <div class="notif-item">
-                      <span class="review-dot" />
-                      <span class="small">{item.title}</span>
+              <div class="dropdown-panel notif-dropdown">
+                {#if $alerts.length > 0}
+                  <div class="dropdown-title">Alert</div>
+                  {#each $alerts as a (a.big_task_id + a.type)}
+                    <div class="notif-item notif-item-alert">
+                      <span class="small"><b>{alertLabel[a.type]}</b></span>
+                      <span class="small muted">{a.big_task_name}</span>
+                      <span class="small muted">{a.board_name}</span>
+                      {#if a.type === 'deadline_soon'}
+                        <span class="small" style="color:var(--win-amber)">{a.days_left === 0 ? 'Hari ini!' : a.days_left === 1 ? 'Besok' : `${a.days_left} hari lagi`} — {a.actual_pct}% vs {a.expected_pct}%</span>
+                      {:else if a.type === 'verdict_lose'}
+                        <span class="small" style="color:var(--win-red)">Deadline {-a.days_left} hari lalu — {a.actual_pct}%</span>
+                      {:else}
+                        <span class="small" style="color:var(--win-green)">{a.actual_pct}% — siap di-sign</span>
+                      {/if}
                     </div>
                   {/each}
-                  {#if pendingReview === 0}
-                    <div class="empty-note">Ga ada yang perlu direview. Rapi.</div>
-                  {/if}
-                  <a class="quick-btn" style="width:100%; margin-top:6px; box-sizing:border-box; text-decoration:none; text-align:center" href="/review-queue" on:click={() => (showNotif = false)}>
-                    Buka Review Queue
-                  </a>
-                {:else}
-                  <div class="empty-note">Review Queue cuma buat role SPV.</div>
+                  <div class="dropdown-divider" />
                 {/if}
+                <div class="dropdown-title">Perlu ditinjau</div>
+                {#each $reviewQueue.slice(0, 5) as item (item.id)}
+                  <div class="notif-item">
+                    <span class="review-dot" />
+                    <span class="small">{item.title}</span>
+                  </div>
+                {/each}
+                {#if pendingReview === 0}
+                  <div class="empty-note">Tidak ada yang perlu ditinjau.</div>
+                {/if}
+                {#if $alerts.length === 0 && pendingReview === 0}
+                  <div class="empty-note">Semua aman 👍</div>
+                {/if}
+                <a class="quick-btn" style="width:100%;margin-top:6px;box-sizing:border-box;text-decoration:none;text-align:center" href="/review-queue" on:click={() => (showNotif = false)}>
+                  Buka Review Queue
+                </a>
               </div>
             {/if}
           </div>
@@ -144,6 +186,11 @@
                 <button class="dropdown-item" on:click={() => { showProfile = true; showUserMenu = false; }}>
                   👤 My Profile
                 </button>
+                {#if isSuperUser}
+                  <a class="dropdown-item" href="/boards/archive" on:click={() => (showUserMenu = false)}>
+                    🗄 Board Archive
+                  </a>
+                {/if}
                 <button class="dropdown-item" on:click={() => { showSettings = true; showUserMenu = false; }}>
                   ⚙️ Settings
                 </button>

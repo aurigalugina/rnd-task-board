@@ -29,11 +29,30 @@ services:
       JWT_SECRET: dev-secret-change-me
       PORT: "8080"
       UPLOAD_DIR: /app/uploads
+      # myagenda-service itu sub-project TERPISAH (compose/network sendiri,
+      # lihat myagenda-service/docker-compose.yml) -- dijangkau lewat host,
+      # bukan nama service docker (beda docker network). Kosongkan/comment
+      # kalau myagenda-service lagi tidak dijalankan (Push tetap jalan
+      # normal, cuma skip sinkron HR -- best-effort, lihat decision log).
+      MYAGENDA_SERVICE_URL: http://host.docker.internal:8090
+      # claude-chat-service (Vision §6, sub-project TERPISAH) — diproksikan
+      # backend lewat /api/v1/chat/* (Opsi B, lihat
+      # decision-log-change-request-integration-20260811.md). Dijangkau lewat
+      # host (beda network, seperti myagenda). PORT 8091 sengaja BEDA dari
+      # myagenda (8090) supaya tidak tabrakan kalau dua-duanya jalan di host —
+      # jalankan service dengan `PORT=8091 npm start`. Kosong/mati = fitur chat
+      # 502 (graceful), fitur lain tetap normal.
+      CLAUDE_CHAT_SERVICE_URL: http://host.docker.internal:8091
+      # Direktori default yang di-point sesi chat (path di HOST tempat
+      # claude-chat-service jalan) — user tetap bisa ganti via dir picker.
+      CHAT_DEFAULT_CWD: /home/lugidev/rnd-task-board
     volumes:
       - ./backend:/app
       - go_mod_cache:/go/pkg/mod
       - backend_air_tmp:/app/tmp
       - uploads_dev:/app/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
     ports:

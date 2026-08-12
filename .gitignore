@@ -7,3 +7,5 @@ backend/rndops-api
 # air (docker-compose.dev.yml) -- mountpoint kosong yang kebuat di host tiap
 # stack dev nyala, isi aslinya ada di named volume, bukan di host.
 backend/tmp/
+myagenda-service/tmp/
+myagenda-service/myagenda-service

@@ -1,0 +1,40 @@
+# Sub-project TERPISAH dari rnd-task-board -- dummy/lokal (MySQL) buat
+# development sekarang. Production nanti dipasang langsung di server aplikasi
+# HR (di luar repo ini), jadi SENGAJA tidak digabung ke docker-compose(.dev).yml
+# rnd-task-board. Lihat docs/decision-log/decision-log-myagenda-hr-service-20260810.md
+# di root repo rnd-task-board.
+name: myagenda-service
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: myagenda
+      MYSQL_USER: myagenda
+      MYSQL_PASSWORD: myagenda
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      MYSQL_DSN: "myagenda:myagenda@tcp(mysql:3306)/myagenda?parseTime=true"
+      PORT: "8090"
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+      - api_tmp:/app/tmp
+    depends_on:
+      - mysql
+    ports:
+      - "8090:8090"
+
+volumes:
+  mysql_data:
+  go_mod_cache:
+  api_tmp:

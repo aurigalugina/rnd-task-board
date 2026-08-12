@@ -1,0 +1,2 @@
+ALTER TABLE boards ADD COLUMN tag TEXT NOT NULL DEFAULT '';
+ALTER TABLE boards DROP COLUMN description;

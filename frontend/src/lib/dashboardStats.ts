@@ -69,11 +69,17 @@ export type DashboardStats = {
   won: number;
   lose: number;
   completionRate: number;
-  runningBoards: BoardAgg[];
+  activeBoards: BoardAgg[];
   loseBoards: BoardAgg[];
   nearestDeadline: BoardAgg[];
 };
 
+// activeBoards = SEMUA board KECUALI yang sudah "done" (selesai, semua Big
+// Task sign-off) -- dipakai bareng oleh progress chart, attention-list, DAN
+// nearestDeadline (satu aturan konsisten, bukan beda-beda per section).
+// Board "done" sudah cukup terwakili di stat card/donut summary, gak perlu
+// dipantau progress-nya lagi di sini. Lihat
+// docs/decision-log/decision-log-dashboard-progress-scope-20260810.md.
 export function computeDashboardStats(boards: BoardAgg[]): DashboardStats {
   const total = boards.length;
   const notStarted = boards.filter((b) => b.status === 'not_started').length;
@@ -84,11 +90,11 @@ export function computeDashboardStats(boards: BoardAgg[]): DashboardStats {
   const lose = boards.filter((b) => b.verdict === 'lose').length;
   const completionRate = total ? Math.round((done / total) * 100) : 0;
 
-  const runningBoards = boards.filter((b) => b.status === 'running');
+  const activeBoards = boards.filter((b) => b.status !== 'done');
   const loseBoards = boards.filter((b) => b.verdict === 'lose');
-  const nearestDeadline = [...runningBoards].sort((a, b) => a.daysLeft - b.daysLeft).slice(0, 5);
+  const nearestDeadline = [...activeBoards].sort((a, b) => a.daysLeft - b.daysLeft).slice(0, 5);
 
-  return { total, notStarted, running, done, hold, won, lose, completionRate, runningBoards, loseBoards, nearestDeadline };
+  return { total, notStarted, running, done, hold, won, lose, completionRate, activeBoards, loseBoards, nearestDeadline };
 }
 
 // Dipakai buat label sumbu-x GroupedBarChart — nama panjang dipotong biar

@@ -44,8 +44,10 @@ big_tasks ─< weekly_push_log
 | initials | varchar(2) | Inisial avatar |
 | email | text | Unique, dipakai untuk login |
 | password_hash | text | bcrypt/argon2 |
-| org_team | text | Afiliasi tim/organisasi, mis. `"R&D"` atau `"QA"` — dipakai untuk penanda visual "di luar tim inti" |
+| org_team | text | Afiliasi tim/organisasi, mis. `"R&D"` atau `"QA"` — dipakai untuk penanda visual "di luar tim inti". TETAP kolom text apa adanya (bukan FK), divalidasi di layer aplikasi harus ada di `referensi_tim.name` (§3.14) — lihat `docs/decision-log/decision-log-hr-mapping-super-user-20260810.md` |
 | theme_preference | text | Default `'retro-light'` |
+| access_level | text | Ditambah migration `0014`. `CHECK IN ('super_user','regular_user')`, default `'regular_user'`. **SENGAJA kolom tunggal** (bukan lewat `roles`/`user_roles` many-to-many seperti biasa) — super_user/regular_user saling eksklusif per user, beda konsep dari `roles` (spv/dev/qa dst) yang bisa dirangkap. Keputusan sadar user, lihat decision log |
+| hr_user_id | integer, nullable | Ditambah migration `0014`. `UNIQUE REFERENCES referensi_user_hr(hr_user_id)` (§3.15) — mapping ke pegawai sistem HR asli, dipakai `weeklyplan.pushToMyAgenda` menggantikan placeholder CRC32 begitu di-set |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -68,7 +70,9 @@ big_tasks ─< weekly_push_log
 |---|---|---|
 | id | uuid | PK |
 | name | text | |
-| tag | text | Label deskriptif, mis. `"CBS Konvensional"` |
+| description | text | Nama board + deskripsi (gantiin `tag` lama, migration `0017`) |
+| archived_at | timestamptz | NULL. Keberadaan = board diarsipkan (existence-pattern, migration `0020`). Board archived hilang dari `GET /boards`, TETAP muncul di Weekly Plan/Review Queue — lihat `decision-log-board-archive-20260812.md` |
+| archived_by | uuid | NULL. FK → users.id, audit trail siapa yang mengarsipkan |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -116,11 +120,12 @@ Keberadaan baris pada tabel ini = Big Task berstatus signed. Undo sign-off = hap
 | daily_task_id | uuid | FK → daily_tasks.id |
 | entry_date | date | |
 | planned_text | text | Nullable/kosong di awal |
-| is_done | boolean | Default false |
+| progress_pct | smallint | `CHECK (0-100)`, default 0. Menggantikan `is_done` boolean (migration `0011`) — `0`=Belum, `1-99`=On Progress, `100`=Selesai, turunan murni di UI, bukan 3 kolom terpisah. Lihat `docs/decision-log/decision-log-day-entry-progress-pct-20260810.md` |
 | blocker_text | text | Nullable |
+| created_at | timestamptz | Ditambah migration `0010` — dasar `ORDER BY entry_date, created_at` (bukan `updated_at`, biar urutan gak geser tiap baris diedit) |
 | updated_at | timestamptz | |
 
-Constraint: unique `(daily_task_id, entry_date)`. Indikator akhir pekan (`is_weekend`) **tidak disimpan** — dihitung dari `entry_date` di layer aplikasi/frontend.
+**TIDAK ADA LAGI constraint unique `(daily_task_id, entry_date)`** (dicabut migration `0010_day_entries_allow_multiple_per_date` — lihat `docs/decision-log/decision-log-day-entry-add-delete-20260810.md`). Satu Daily Task boleh punya lebih dari satu baris di tanggal yang sama (breakdown lebih dari satu task per hari), dan boleh nol (semua baris di tanggal itu dihapus, mis. weekend yang PIC-nya gak mau lembur) — `actual_pct` (§5.1) otomatis menyesuaikan karena dihitung dari SEMUA baris yang ADA saat dibaca, bukan disimpan terpisah. Indikator akhir pekan (`is_weekend`) **tidak disimpan** — dihitung dari `entry_date` di layer aplikasi/frontend.
 
 ### 3.9 `comments`
 | Kolom | Tipe | Keterangan |
@@ -183,6 +188,40 @@ Menyimpan status "sudah ditinjau" untuk kebutuhan Review Queue (FR-NTF-01/02/03)
 
 Constraint: unique `(item_type, item_id)` — `mark-reviewed` bersifat idempoten (upsert `reviewed_by`/`reviewed_at`, bukan insert baris baru).
 
+### 3.14 `big_task_reviewers`
+
+Reviewer yang di-assign eksplisit ke satu Big Task (orang spesifik, bisa lebih dari satu) — dasar filter otorisasi Review Queue per user (§9 API contract). Ditambahkan Fase pasca-8 — lihat `docs/decision-log/decision-log-bigtask-reviewer-assignment-20260810.md`. Menggantikan sebagian `decision-log-review-queue-scope-20260809.md` (yang tadinya hardcode role spv).
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| big_task_id | uuid | FK → big_tasks.id, ON DELETE CASCADE |
+| user_id | uuid | FK → users.id, ON DELETE CASCADE |
+
+PK komposit `(big_task_id, user_id)` — satu baris per pasangan, insert ulang otomatis idempoten lewat `ON CONFLICT DO NOTHING` kalau dibutuhkan (saat ini di-insert sekali saat create Big Task, belum ada endpoint update terpisah). Big Task TANPA baris di tabel ini = "belum di-assign reviewer" → Review Queue fallback ke role `spv` (lihat `reviewqueue.List`).
+
+### 3.15 `referensi_tim`
+
+Daftar nama tim/org — sumber dropdown "Tim/Org" di form user (`users.org_team`), gantiin free-text. Ditambahkan migration `0012`, lihat `docs/decision-log/decision-log-hr-mapping-super-user-20260810.md`.
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid | PK |
+| name | text | Unique, mis. `"R&D"` |
+| created_at | timestamptz | |
+
+Bukan CRUD penuh — cuma `GET`/`POST` (tambah nama tim baru), belum ada update/delete (belum ada kebutuhannya).
+
+### 3.16 `referensi_user_hr`
+
+Data pegawai sistem HR (MyAgenda) asli — dasar mapping `users.hr_user_id`. Di-seed migration `0013` PERSIS dari export yang diberikan (~78 baris) — data ini MILIK sistem HR eksternal, TIDAK ADA CRUD UI (update resmi lewat migration baru kalau daftar pegawai HR berubah). Lihat decision log di atas.
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| hr_user_id | integer | PK, SAMA PERSIS dengan `user_id` di export HR (bukan auto-increment kita) |
+| email | text | |
+| nip | text, nullable | Beberapa baris export aslinya `"-"`, di-seed sebagai `NULL` |
+| nama_lengkap | text | |
+
 ## 4. Indeks yang Direkomendasikan
 
 ```sql
@@ -195,6 +234,7 @@ CREATE INDEX idx_comments_daily_task_id ON comments(daily_task_id);
 CREATE INDEX idx_cheat_sheet_items_board_id ON cheat_sheet_items(board_id);
 CREATE INDEX idx_weekly_push_log_lookup ON weekly_push_log(big_task_id, week_start);
 CREATE INDEX idx_item_reviews_lookup ON item_reviews(item_type, item_id);
+CREATE INDEX idx_big_task_reviewers_user ON big_task_reviewers(user_id);
 ```
 
 `idx_day_entries_entry_date` penting untuk kalkulasi rollup mingguan (FR-WKL-02/03) yang memfilter berdasarkan rentang tanggal lintas banyak Daily Task.
@@ -202,10 +242,11 @@ CREATE INDEX idx_item_reviews_lookup ON item_reviews(item_type, item_id);
 ## 5. Contoh Query Kunci (Ilustratif)
 
 ### 5.1 `actual_pct` Daily Task
+Rata-rata `progress_pct` (0-100) semua `day_entries`-nya — BUKAN lagi persentase hari yang "full selesai" (lihat `decision-log-day-entry-progress-pct-20260810.md`, `progress_pct` menggantikan `is_done` boolean per migration `0011`).
 ```sql
 SELECT
   daily_task_id,
-  ROUND(100.0 * COUNT(*) FILTER (WHERE is_done) / COUNT(*), 0) AS actual_pct
+  ROUND(AVG(progress_pct), 0) AS actual_pct
 FROM day_entries
 WHERE daily_task_id = $1
 GROUP BY daily_task_id;
@@ -218,7 +259,7 @@ SELECT
   ROUND(AVG(sub.actual_pct), 0) AS actual_pct
 FROM daily_tasks dt
 JOIN (
-  SELECT daily_task_id, 100.0 * COUNT(*) FILTER (WHERE is_done) / COUNT(*) AS actual_pct
+  SELECT daily_task_id, AVG(progress_pct) AS actual_pct
   FROM day_entries GROUP BY daily_task_id
 ) sub ON sub.daily_task_id = dt.id
 WHERE dt.big_task_id = $1
@@ -246,4 +287,10 @@ GROUP BY dt.big_task_id;
 5. `0005_create_weekly_push_log.sql` — `weekly_push_log`.
 6. `0006_create_change_requests.sql` — `change_requests` (skema disiapkan, tidak dipakai UI Fase 1).
 7. `0007_indexes.sql` — seluruh indeks pada §4.
-8. `0008_create_item_reviews.sql` — `item_reviews` (direncanakan, belum dibuat — lihat `docs/decision-log/decision-log-review-queue-schema-20260808.md`; dieksekusi saat Fase 7 roadmap pengembangan dikerjakan).
+8. `0008_create_item_reviews.sql` — `item_reviews` (dieksekusi Fase 7, lihat `docs/decision-log/decision-log-review-queue-schema-20260808.md`).
+9. `0009_create_big_task_reviewers.sql` — `big_task_reviewers` (§3.14), lihat `docs/decision-log/decision-log-bigtask-reviewer-assignment-20260810.md`.
+10. `0010_day_entries_allow_multiple_per_date.sql` — cabut unique `(daily_task_id, entry_date)` di `day_entries`, tambah kolom `created_at`, lihat `docs/decision-log/decision-log-day-entry-add-delete-20260810.md`.
+11. `0011_day_entries_progress_pct.sql` — ganti `day_entries.is_done` (boolean) jadi `progress_pct` (smallint 0-100), lihat `docs/decision-log/decision-log-day-entry-progress-pct-20260810.md`.
+12. `0012_create_referensi_tim.sql` — `referensi_tim` (§3.15), seed `'R&D'`.
+13. `0013_create_referensi_user_hr.sql` — `referensi_user_hr` (§3.16), seed ~78 baris dari export HR.
+14. `0014_add_users_hr_access_level.sql` — tambah `users.access_level` dan `users.hr_user_id`, lihat `docs/decision-log/decision-log-hr-mapping-super-user-20260810.md`.

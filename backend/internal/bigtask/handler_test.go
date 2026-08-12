@@ -79,3 +79,29 @@ func TestComputeVerdictDaysLeft(t *testing.T) {
 		t.Errorf("daysLeft = %d, want 3", daysLeft)
 	}
 }
+
+func TestDedupeMembers(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"buang duplikat, jaga urutan", []string{"a", "b", "a", "c", "b"}, []string{"a", "b", "c"}},
+		{"buang string kosong", []string{"a", "", "b", ""}, []string{"a", "b"}},
+		{"nil -> slice kosong", nil, []string{}},
+		{"semua unik tidak berubah", []string{"x", "y"}, []string{"x", "y"}},
+	}
+	for _, c := range cases {
+		got := dedupeMembers(c.in)
+		if len(got) != len(c.want) {
+			t.Errorf("%s: len = %d, want %d (%v)", c.name, len(got), len(c.want), got)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+				break
+			}
+		}
+	}
+}

@@ -10,24 +10,28 @@
   --face: #DEE3E8; --face-light: #FFFFFF; --content-bg: #FFFFFF; --content-alt: #EDF1F4;
   --text-primary: #000000; --text-muted: #4D4D4D;
   --titlebar-a: #34506E; --titlebar-b: #8FADC2;
+  --titlebar-text: #FFFFFF; --titlebar-text-muted: #D6E2EA;
   --win-blue: #34506E; --win-blue-light: #DDE7EC; --win-green: #3E7D6E; --win-red: #B85C52; --win-amber: #9E8A5C;
 }
 :root[data-theme='retro-dark'] {
   --face: #232B33; --face-light: #2E3841; --content-bg: #1B2229; --content-alt: #28323B;
   --text-primary: #E7EDF2; --text-muted: #9FB0BD;
   --titlebar-a: #0F2E44; --titlebar-b: #3D6688;
+  --titlebar-text: #FFFFFF; --titlebar-text-muted: #C7D6E0;
   --win-blue: #6FAEDE; --win-blue-light: #2B3F52; --win-green: #6FC2A8; --win-red: #E29184; --win-amber: #D8BE85;
 }
 :root[data-theme='modern-light'] {
   --face: #F3F3F3; --face-light: #FFFFFF; --content-bg: #FFFFFF; --content-alt: #F7F7F7;
   --text-primary: #1B1B1B; --text-muted: #616161;
   --titlebar-a: #FFFFFF; --titlebar-b: #FFFFFF;
+  --titlebar-text: #1B1B1B; --titlebar-text-muted: #616161;
   --win-blue: #005FB8; --win-blue-light: #E5F2FC; --win-green: #0F7B0F; --win-red: #C42B1C; --win-amber: #9D5D00;
 }
 :root[data-theme='modern-dark'] {
   --face: #202020; --face-light: #2B2B2B; --content-bg: #2B2B2B; --content-alt: #252525;
   --text-primary: #F3F3F3; --text-muted: #B0B0B0;
   --titlebar-a: #202020; --titlebar-b: #202020;
+  --titlebar-text: #F3F3F3; --titlebar-text-muted: #B0B0B0;
   --win-blue: #60CDFF; --win-blue-light: #233240; --win-green: #6CCB5F; --win-red: #FF99A4; --win-amber: #FCE100;
 }
 
@@ -37,20 +41,29 @@ body {
   color: var(--text-primary);
 }
 
+/* Browser default `<button>` punya UA color sendiri (buttontext, biasanya
+   hitam) yang gak ikut cascade dari .app/body seperti elemen lain --
+   text anak di dalam button yang gak eksplisit set color sendiri (mis.
+   .bigtask-list-name, tab .role-filter-pill di Settings) jadi ke-stuck
+   hitam walau temanya gelap. Ketauan user pas tema Modern dark (hitam di
+   atas gelap = nyaris gak kebaca), tapi ini bug lama lintas-tema -- di
+   tema terang cuma "untung" gak kelihatan karena hitam emang warna yang
+   dimaksud di situ. */
+button { color: inherit; }
+
 .app {
   background: var(--face);
   color: var(--text-primary);
   font-family: Tahoma, 'MS Sans Serif', 'Segoe UI', Arial, sans-serif;
   font-size: 11px;
-  border: 2px outset var(--face);
   min-height: 100vh;
-  overflow: hidden;
-  /* Tanpa max-width, .app (dan tabel width:100% di dalamnya) melebar penuh
-     mengikuti monitor lebar — bikin tabel isinya jarang-jarang kelihatan
-     tidak rapi. Dibatasi + di-center, sisanya kelihatan desktop abu-abu
-     (konsisten sama tampilan window mengambang di halaman login). */
-  max-width: 1280px;
-  margin: 0 auto;
+  /* SENGAJA fluid, ikut lebar browser (bukan window retro yang fixed
+     mengambang di desktop abu-abu) — tema-nya retro secara visual (warna,
+     font, border), tapi layout-nya tetap web app modern yang responsive.
+     Kalau ada tabel/section yang isinya sedikit kolom dan kelihatan jarang
+     di monitor lebar, batasi max-width DI TABEL/SECTION itu sendiri (lihat
+     .weekplan-table dkk), jangan di .app. */
+  width: 100%;
 }
 
 a { color: var(--win-blue); }
@@ -64,7 +77,7 @@ a { color: var(--win-blue); }
   display: flex; align-items: center; justify-content: space-between;
   padding: 3px 3px 3px 6px;
   background: linear-gradient(90deg, var(--titlebar-a), var(--titlebar-b));
-  color: #FFFFFF;
+  color: var(--titlebar-text);
 }
 .titlebar-left { display: flex; align-items: center; gap: 6px; }
 .titlebar-icon {
@@ -99,6 +112,12 @@ a { color: var(--win-blue); }
   border: 1px outset var(--win-red); padding: 0px 5px; margin-left: 2px; font-family: 'Courier New', monospace;
 }
 .topbar-right { display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
+/* Titik hijau kecil di tab "Change request" -- nandain sesi chat masih hidup
+   walau user lagi di menu lain (sesi persist sampai "Akhiri sesi"). */
+.chat-live-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--win-green); margin-left: 5px; vertical-align: middle;
+}
 
 .content { padding: 12px; min-height: 420px; background: var(--content-bg); border: 1px solid #C3C8CC; border-top: none; overflow-y: auto; }
 
@@ -128,6 +147,10 @@ a { color: var(--win-blue); }
 .chart-row { display: flex; align-items: center; gap: 8px; }
 
 .sheet-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+/* .app sekarang fluid (ikut lebar browser) -- tabel kolom-dikit kayak ini
+   dibatasi max-width di sini sendiri, biar gak jadi jarang-jarang di monitor
+   lebar, tanpa perlu mengunci seluruh app jadi fixed-width. */
+.weekplan-table { max-width: 900px; }
 .sheet-table th {
   text-align: left; color: #FFFFFF; font-weight: bold; font-size: 10.5px;
   padding: 4px 7px; background: var(--win-blue);
@@ -138,8 +161,9 @@ a { color: var(--win-blue); }
 .section { margin-bottom: 18px; }
 .section-title {
   font-size: 11px; font-weight: bold; margin-bottom: 8px; padding: 3px 6px;
-  background: linear-gradient(90deg, var(--titlebar-a), var(--titlebar-b)); color: #FFFFFF;
+  background: linear-gradient(90deg, var(--titlebar-a), var(--titlebar-b)); color: var(--titlebar-text);
 }
+.section-title .muted { color: var(--titlebar-text-muted); }
 
 .attention-list { display: flex; flex-direction: column; gap: 4px; }
 .attention-row {
@@ -150,14 +174,44 @@ a { color: var(--win-blue); }
 .attention-name { font-size: 11px; font-weight: bold; }
 .attention-bar { min-width: 140px; }
 .days-late { color: var(--win-red); font-weight: bold; }
+/* Tint baris yang sudah lewat deadline, biar keliatan tanpa perlu baca
+   angka "Sisa hari" satu-satu (lihat sheet-table di Dashboard). Selector
+   di-samakan specificity-nya dengan `.sheet-table tr:nth-child(even) td`
+   di atas (2 class + 2 type) supaya gak ketiban zebra-stripe di baris genap. */
+.sheet-table tr.row-overdue td { background: color-mix(in srgb, var(--win-red) 14%, var(--content-bg)); }
 
 .empty-note { color: var(--text-muted); font-size: 11px; padding: 8px 2px; }
+
+/* Empty state buat halaman/section level (bukan inline/table/dropdown --
+   itu tetap pakai .empty-note biasa) -- dipusatkan + icon, biar gak
+   kerasa kayak halaman gagal-load waktu list-nya kosong. */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 64px 16px; text-align: center;
+}
+.empty-state-icon { font-size: 26px; opacity: 0.5; line-height: 1; }
+.empty-state-text { color: var(--text-muted); font-size: 11px; }
 
 .team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .team-card { background: var(--face); border: 2px groove var(--face); padding: 8px; }
 .team-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .team-name { font-size: 11px; font-weight: bold; }
 .team-card-stats { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; }
+.team-progress { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.team-stat-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.team-stat-pill {
+  font-size: 9.5px; padding: 1px 5px; border-radius: 2px;
+  border: 1px solid transparent; font-weight: bold; white-space: nowrap;
+}
+.team-stat-belum { background: var(--content-alt); color: var(--text-muted); border-color: var(--text-muted); }
+.team-stat-onprogress { background: var(--win-blue-light); color: var(--win-blue); border-color: var(--win-blue); }
+.team-stat-selesai { background: var(--win-green); color: #fff; border-color: var(--win-green); }
+.team-completion-label { display: flex; justify-content: space-between; align-items: center; }
+.team-completion-bar {
+  height: 5px; background: var(--content-alt); border: 1px solid var(--text-muted);
+  border-radius: 1px; overflow: hidden;
+}
+.team-completion-fill { height: 100%; background: var(--win-green); transition: width 0.3s; }
 
 .avatar {
   border: 1px outset var(--face); background: var(--content-bg); color: var(--win-blue);
@@ -186,6 +240,15 @@ a { color: var(--win-blue); }
 .badge-lose::before { background: var(--win-red); }
 .badge-on_progress::before { background: var(--win-blue); }
 .badge-on_progress { color: var(--win-blue); border-color: var(--win-blue); }
+/* Tone generik (dipakai change request status, dsb) — bukan verdict-specific. */
+.badge-good::before { background: var(--win-green); }
+.badge-good { color: var(--win-green); border-color: var(--win-green); }
+.badge-bad::before { background: var(--win-red); }
+.badge-bad { color: var(--win-red); border-color: var(--win-red); }
+.badge-accent::before { background: var(--win-blue); }
+.badge-accent { color: var(--win-blue); border-color: var(--win-blue); }
+.badge-neutral::before { background: var(--text-muted); }
+.badge-neutral { color: var(--text-muted); }
 
 /* ---- Board tabs & big task / daily task ---- */
 .board-pills { display: flex; gap: 0; flex-wrap: wrap; }
@@ -196,7 +259,9 @@ a { color: var(--win-blue); }
 }
 .board-pill-active { background: var(--content-bg); font-weight: bold; border-bottom: 1px solid var(--content-bg); z-index: 1; }
 .board-pill-ghost { border-style: dashed; display: flex; align-items: center; gap: 4px; }
-.board-pills-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+/* Tab board nempel langsung ke banner/form di bawahnya tanpa jarak sama
+   sekali (0 margin) -- kelihatan sesak, ketauan user lewat screenshot. */
+.board-pills-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 
 .project-status-banner {
   display: flex; align-items: center; gap: 8px; background: var(--face);
@@ -230,22 +295,62 @@ a { color: var(--win-blue); }
 .daily-task-title { font-size: 11px; font-weight: bold; }
 .daily-task-head-right { display: flex; align-items: center; gap: 8px; }
 
+/* Task hasil clone-review (judul "[Review ...] ...") dikasih aksen kiri +
+   tint header, biar beda kelihatan dari daily task asli tanpa perlu baca
+   judulnya dulu -- terutama pas satu big task punya banyak card berjejer. */
+.daily-task-card-review { border-left: 4px solid var(--win-amber); }
+.daily-task-card-review .daily-task-head { background: color-mix(in srgb, var(--win-amber) 12%, var(--face)); }
+
 .daily-day-table { font-size: 10.5px; }
 .daily-day-table th { padding: 4px 6px; }
 .daily-day-table td { padding: 4px 6px; vertical-align: middle; }
 .row-weekend { background: var(--content-alt); }
+.row-past { opacity: 0.6; }
+.row-past input, .row-past select, .row-past button { cursor: not-allowed; }
 .lembur-badge {
   display: inline-block; margin-left: 5px; font-size: 9px; font-weight: bold; color: #FFFFFF;
   background: var(--win-red); padding: 1px 4px; vertical-align: middle;
 }
-
-.day-status-btn {
-  border: 1px outset var(--face); font-size: 10px; padding: 3px 8px; cursor: pointer;
-  font-family: inherit;
+.past-badge {
+  display: inline-block; margin-left: 5px; font-size: 9px; font-weight: bold; color: #FFFFFF;
+  background: var(--np-muted, var(--win-muted, #7c859e)); padding: 1px 4px; vertical-align: middle;
 }
-.day-status-btn:active { border-style: inset; }
-.day-status-done { background: var(--win-blue-light); color: var(--win-green); font-weight: bold; }
-.day-status-open { background: var(--face); color: var(--win-red); }
+
+/* Toggle switch (Toggle.svelte) -- pola modern buat boolean state, warnanya
+   tetap ikut token tema retro. */
+.toggle-switch {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none; padding: 0; cursor: pointer; font-family: inherit;
+}
+.toggle-switch:disabled { cursor: not-allowed; opacity: 0.6; }
+.toggle-track {
+  width: 30px; height: 16px; border-radius: 999px; flex-shrink: 0;
+  background: var(--text-muted); opacity: 0.5;
+  position: relative; transition: background 0.15s ease, opacity 0.15s ease;
+}
+.toggle-on .toggle-track { background: var(--win-green); opacity: 1; }
+.toggle-knob {
+  position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
+  background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.4); transition: left 0.15s ease;
+}
+.toggle-on .toggle-knob { left: 16px; }
+.toggle-text { color: var(--win-red); }
+.toggle-on .toggle-text { color: var(--win-green); font-weight: bold; }
+
+/* DayProgressStatus.svelte -- 3 state (Belum/On Progress/Selesai) diturunkan
+   dari progress_pct 0-100, gantiin Toggle buat Day Entry (2026-08-10). */
+.day-progress { display: flex; align-items: center; gap: 4px; }
+.day-progress-select {
+  font-family: inherit; font-size: 10px; padding: 3px 5px; cursor: pointer;
+  border: 1px outset var(--face); background: var(--face); color: var(--text-primary);
+}
+.day-progress-select.status-belum { color: var(--win-red); }
+.day-progress-select.status-on_progress { color: var(--win-amber); font-weight: bold; }
+.day-progress-select.status-selesai { color: var(--win-green); font-weight: bold; }
+.day-progress-pct-input {
+  width: 42px; font-family: inherit; font-size: 10px; padding: 3px 4px;
+  border: 1px inset var(--face); background: var(--content-bg); color: var(--text-primary);
+}
 
 .sign-btn {
   background: var(--content-bg); border: 1px outset var(--face); color: var(--text-primary);
@@ -286,6 +391,46 @@ a { color: var(--win-blue); }
 }
 .inline-form-row { display: flex; align-items: center; gap: 8px; }
 .inline-form-actions { display: flex; gap: 6px; }
+
+.reviewer-picker {
+  display: flex; flex-direction: column; gap: 3px; width: 100%;
+  border: 1px solid #C3C8CC; background: var(--content-bg); padding: 6px; max-height: 120px; overflow-y: auto;
+}
+.reviewer-picker-row { display: flex; align-items: center; gap: 5px; }
+.reviewer-avatars { display: inline-flex; align-items: center; gap: -4px; }
+.reviewer-avatars :global(.avatar) { margin-left: -4px; border: 1px solid var(--content-bg); }
+.reviewer-avatars :global(.avatar:first-child) { margin-left: 0; }
+
+/* Summary anggota tim di detail Big Task (di atas daftar daily task) --
+   decision-log-bigtask-members-refactor-20260811.md. */
+.member-summary {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 6px 8px; margin: 6px 0 10px; background: var(--content-alt);
+  border: 1px solid #C3C8CC;
+}
+.member-chip { display: inline-flex; align-items: center; gap: 4px; }
+.member-manage-btn { margin-left: auto; }
+.member-editor { margin: 0 0 10px; max-width: 320px; }
+
+/* Week navigator (My Weekly Plan) -- dulu dua .quick-btn ditumpuk vertikal
+   (jelek, gak ada CSS layout sama sekali). Sekarang satu bar horizontal
+   compact, chevron icon-button di kiri/kanan, tanggal di tengah -- pola
+   modern (kayak date-range picker biasa), warnanya tetap ikut token tema. */
+.week-nav {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--content-bg); border: 1px solid #C3C8CC; border-radius: 999px;
+  padding: 4px 6px; margin-bottom: 12px;
+}
+.week-nav-arrow {
+  width: 24px; height: 24px; border-radius: 50%; border: none; background: transparent;
+  color: var(--win-blue); font-size: 16px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.week-nav-arrow:hover { background: var(--win-blue-light); }
+.week-nav-arrow:active { background: var(--win-blue); color: #FFFFFF; }
+.week-nav-range { display: flex; flex-direction: column; align-items: center; min-width: 160px; }
+.week-nav-dates { font-size: 11px; font-weight: bold; font-family: 'Courier New', monospace; }
+.week-nav-label { line-height: 1.2; }
 
 .quick-btn {
   background: var(--face); border: 1px outset var(--face); color: var(--text-primary);
@@ -339,10 +484,13 @@ a { color: var(--win-blue); }
 }
 .panel-header {
   display: flex; align-items: center; justify-content: space-between;
-  background: linear-gradient(90deg, var(--titlebar-a), var(--titlebar-b)); color: #FFFFFF; padding: 5px 8px;
+  background: linear-gradient(90deg, var(--titlebar-a), var(--titlebar-b)); color: var(--titlebar-text); padding: 5px 8px;
 }
+.panel-header .muted { color: var(--titlebar-text-muted); }
 .icon-btn { background: var(--face); border: 1px outset var(--face); color: #000; cursor: pointer; width: 18px; height: 16px; display: flex; align-items: center; justify-content: center; }
 .icon-btn:active { border-style: inset; }
+.icon-btn-danger:hover { background: var(--win-red); }
+.day-row-actions { display: flex; gap: 4px; white-space: nowrap; }
 .panel-title { font-size: 12px; font-weight: bold; margin: 0; padding: 12px 14px 4px; }
 .panel-row { display: flex; align-items: center; gap: 10px; padding: 0 14px; }
 .panel-row-name { font-size: 11px; font-weight: bold; }
@@ -353,6 +501,18 @@ a { color: var(--win-blue); }
 
 .modal-box { width: 320px; max-width: 90%; background: var(--face); border: 2px outset var(--face); margin: auto; max-height: 85vh; display: flex; flex-direction: column; }
 .modal-box-wide { width: 480px; }
+/* Tabel Manajemen User (SettingsModal) sekarang 7 kolom (Nama/Email/Role/
+   Tim/Access/Mapping HR/Aksi) -- lebih lebar dari modal wide biasa (480px),
+   dan tabelnya sendiri scroll horizontal kalau masih kepotong di layar
+   sempit, bukan modal-nya yang melebar sampai ketutup layar. */
+.modal-box-user-mgmt { width: 820px; }
+.modal-box-master { width: 560px; }
+.ref-section { display: flex; flex-direction: column; gap: 4px; }
+.ref-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--face); }
+.ref-add-row { border-bottom: none; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--face); }
+.ref-name { flex: 1; font-size: 11px; }
+.ref-code { font-family: 'Courier New', monospace; font-size: 10px; color: var(--text-muted); min-width: 70px; }
+.modal-body-scroll-x { overflow-x: auto; }
 .modal-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--content-bg); overflow-y: auto; }
 .settings-tabs { display: flex; gap: 4px; padding: 8px 14px 0; background: var(--content-bg); }
 
@@ -376,12 +536,18 @@ a { color: var(--win-blue); }
 }
 .dropdown-title { font-size: 10.5px; font-weight: bold; margin-bottom: 6px; }
 .notif-item { display: flex; align-items: center; gap: 6px; padding: 4px 2px; }
+.notif-dropdown { width: 280px; }
+.notif-item-alert { flex-direction: column; align-items: flex-start; gap: 2px; padding: 5px 4px; border-left: 3px solid var(--win-amber); margin-bottom: 4px; background: var(--content-alt); }
+.notif-guide { background: var(--content-alt); border: 1px solid var(--face); padding: 8px 10px; font-size: 10.5px; margin-bottom: 4px; }
+.notif-guide-steps { margin: 4px 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.notif-toggle-row { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 3px 0; }
+.notif-toggle-row input[type="checkbox"] { margin: 0; }
 .user-menu-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 8px; }
 .dropdown-divider { border-top: 1px solid #C3C8CC; margin: 4px 0; }
 .dropdown-item {
   display: flex; align-items: center; gap: 8px; width: 100%; background: transparent; border: none;
   padding: 6px 4px; cursor: pointer; font-family: inherit; font-size: 11px; color: var(--text-primary);
-  text-align: left;
+  text-align: left; text-decoration: none;
 }
 .dropdown-item:hover { background: var(--win-blue-light); }
 .dropdown-item-danger { color: var(--win-red); }
@@ -440,9 +606,86 @@ a { color: var(--win-blue); }
 :root[data-theme='modern-light'] .tab-btn, :root[data-theme='modern-dark'] .tab-btn,
 :root[data-theme='modern-light'] .role-filter-pill, :root[data-theme='modern-dark'] .role-filter-pill,
 :root[data-theme='modern-light'] .sign-btn, :root[data-theme='modern-dark'] .sign-btn,
-:root[data-theme='modern-light'] .day-status-btn, :root[data-theme='modern-dark'] .day-status-btn,
 :root[data-theme='modern-light'] .icon-btn, :root[data-theme='modern-dark'] .icon-btn {
   border-radius: 6px; border-style: solid !important;
 }
 :root[data-theme='modern-light'] .badge, :root[data-theme='modern-dark'] .badge { border-radius: 999px; }
 :root[data-theme='modern-light'] .titlebar-icon, :root[data-theme='modern-dark'] .titlebar-icon { border-radius: 6px; }
+
+/* ---- Modern theme -- refresh font/button/nav (2026-08-12) ----
+   Retro light/dark SENGAJA tidak disentuh (tetap replika Win9x/XP murni,
+   font Tahoma 11px, border outset/inset -- itu udah final). Blok ini
+   CUMA nyalain tema Modern biar beda kelas dari Retro, bukan cuma beda
+   warna: font sans modern, button dapat transition+hover-lift (ganti
+   feedback "border inset" ala Windows yang ke-mute abis border-style
+   dipaksa solid di atas), nav tab/board-pill jadi segmented pill
+   (bukan folder-tab ala file explorer). Struktur halaman & density
+   TIDAK diubah -- lihat decision-log kalau mau eskalasi lebih dalam. */
+:root[data-theme='modern-light'] .app,
+:root[data-theme='modern-dark'] .app {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif;
+}
+:root[data-theme='modern-light'] .titlebar-title,
+:root[data-theme='modern-dark'] .titlebar-title { font-size: 12px; font-weight: 600; letter-spacing: 0.1px; }
+
+:root[data-theme='modern-light'] .topbar,
+:root[data-theme='modern-dark'] .topbar { padding: 7px 10px; }
+:root[data-theme='modern-light'] .tabs, :root[data-theme='modern-dark'] .tabs { gap: 3px; }
+:root[data-theme='modern-light'] .tab-btn, :root[data-theme='modern-dark'] .tab-btn,
+:root[data-theme='modern-light'] .board-pill, :root[data-theme='modern-dark'] .board-pill {
+  border: none; top: 0; margin-right: 0; padding: 6px 13px; font-weight: 500;
+  transition: background-color .15s ease, color .15s ease;
+}
+:root[data-theme='modern-light'] .tab-btn:hover, :root[data-theme='modern-dark'] .tab-btn:hover,
+:root[data-theme='modern-light'] .board-pill:hover, :root[data-theme='modern-dark'] .board-pill:hover {
+  background: var(--content-alt);
+}
+:root[data-theme='modern-light'] .tab-btn-active, :root[data-theme='modern-dark'] .tab-btn-active,
+:root[data-theme='modern-light'] .board-pill-active, :root[data-theme='modern-dark'] .board-pill-active {
+  background: var(--win-blue); color: #FFFFFF; border-bottom: none; box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+
+:root[data-theme='modern-light'] .quick-btn, :root[data-theme='modern-dark'] .quick-btn,
+:root[data-theme='modern-light'] .approve-btn, :root[data-theme='modern-dark'] .approve-btn,
+:root[data-theme='modern-light'] .sign-btn, :root[data-theme='modern-dark'] .sign-btn,
+:root[data-theme='modern-light'] .add-card-ghost, :root[data-theme='modern-dark'] .add-card-ghost,
+:root[data-theme='modern-light'] .role-filter-pill, :root[data-theme='modern-dark'] .role-filter-pill {
+  padding-block: 6px; transition: background-color .15s ease, box-shadow .15s ease, transform .05s ease;
+}
+:root[data-theme='modern-light'] .quick-btn:hover:not(:disabled), :root[data-theme='modern-dark'] .quick-btn:hover:not(:disabled),
+:root[data-theme='modern-light'] .approve-btn:hover:not(:disabled), :root[data-theme='modern-dark'] .approve-btn:hover:not(:disabled),
+:root[data-theme='modern-light'] .sign-btn:hover:not(:disabled), :root[data-theme='modern-dark'] .sign-btn:hover:not(:disabled),
+:root[data-theme='modern-light'] .add-card-ghost:hover, :root[data-theme='modern-dark'] .add-card-ghost:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15); transform: translateY(-1px);
+}
+:root[data-theme='modern-light'] .quick-btn:active:not(:disabled), :root[data-theme='modern-dark'] .quick-btn:active:not(:disabled),
+:root[data-theme='modern-light'] .approve-btn:active, :root[data-theme='modern-dark'] .approve-btn:active,
+:root[data-theme='modern-light'] .sign-btn:active:not(:disabled), :root[data-theme='modern-dark'] .sign-btn:active:not(:disabled),
+:root[data-theme='modern-light'] .add-card-ghost:active, :root[data-theme='modern-dark'] .add-card-ghost:active {
+  transform: translateY(0); box-shadow: none;
+}
+:root[data-theme='modern-light'] .icon-btn, :root[data-theme='modern-dark'] .icon-btn {
+  transition: background-color .15s ease;
+}
+
+/* .section-title di Retro/Modern-dark punya bar gradient warna yang
+   sekaligus jadi "pembatas" visual antar section -- di Modern LIGHT
+   titlebar-a/b sengaja putih (blend sama background), jadi tanpa fix
+   section-title jadi gak kelihatan bar-nya sama sekali dan section-nya
+   gak punya batas apa-apa (ketauan user: "jelek", keluhan soal dashboard
+   yang keliatan flat & bolong-bolong). Fix: di Modern (light & dark),
+   .section dibikin jadi card sendiri (background+border+shadow), dan
+   .section-title jadi header di dalam card itu (underline tipis), bukan
+   bar warna lagi -- jadi tetap ada batas antar section walau warnanya
+   gak dipakai buat itu lagi. */
+:root[data-theme='modern-light'] .section,
+:root[data-theme='modern-dark'] .section {
+  background: var(--face-light); border: 1px solid var(--content-alt);
+  border-radius: 10px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+:root[data-theme='modern-light'] .section-title,
+:root[data-theme='modern-dark'] .section-title {
+  background: none; color: var(--text-primary); font-size: 12.5px; font-weight: 600;
+  padding: 0 0 10px; margin: -2px 0 12px; border-bottom: 1px solid var(--content-alt);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+}

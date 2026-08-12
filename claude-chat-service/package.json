@@ -1,0 +1,31 @@
+{
+  "name": "claude-chat-service",
+  "version": "0.1.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Bridge service between Claude Code and rnd-task-board client apps",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.227",
+    "express": "^5.2.1",
+    "node-pty": "^1.1.0",
+    "ws": "^8.21.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

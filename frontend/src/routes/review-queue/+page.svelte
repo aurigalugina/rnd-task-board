@@ -31,7 +31,7 @@
 
 <div class="section">
   <div class="section-title">
-    Antrean review <span class="muted small">— {$reviewQueue.length} task menunggu atensi lo</span>
+    Antrean review <span class="muted small">— {$reviewQueue.length} task menunggu ditinjau</span>
   </div>
 
   {#if loading}
@@ -44,15 +44,21 @@
         <div class="queue-row">
           <a class="queue-main" href="/boards?board={item.board_id}">
             <div class="queue-title">{item.title}</div>
+            {#if item.source_daily_task_title}
+              <div class="muted small">Mereview daily task: <strong>{item.source_daily_task_title}</strong></div>
+            {/if}
             <div class="muted small">{item.board_name} / {item.big_task_name}</div>
           </a>
           <button class="approve-btn" on:click={() => markReviewed(item)} disabled={markingId === item.id}>
-            ✓ {markingId === item.id ? 'Menyimpan...' : 'Sudah gue lihat'}
+            ✓ {markingId === item.id ? 'Menyimpan...' : 'Sudah ditinjau'}
           </button>
         </div>
       {/each}
       {#if $reviewQueue.length === 0}
-        <div class="empty-note">Semua task udah lo review. Rapi.</div>
+        <div class="empty-state">
+          <div class="empty-state-icon">✓</div>
+          <div class="empty-state-text">Semua task sudah ditinjau.</div>
+        </div>
       {/if}
     </div>
   {/if}

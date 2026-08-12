@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
-  import type { AssignableUser, Board, BigTask } from '$lib/types';
+  import { auth } from '$lib/stores/authStore';
+  import type { AssignableUser, Board, BigTask, UserProgressSummary } from '$lib/types';
   import VerdictBadge from '$lib/components/VerdictBadge.svelte';
   import DualBar from '$lib/components/DualBar.svelte';
   import StatCard from '$lib/components/StatCard.svelte';
@@ -12,6 +13,7 @@
 
   let boardGroups: BoardWithTasks[] = [];
   let team: AssignableUser[] = [];
+  let progressSummaries: UserProgressSummary[] = [];
   let loading = true;
   let error: string | null = null;
 
@@ -21,11 +23,13 @@
   // docs/decision-log/decision-log-dashboard-board-level-aggregation-20260810.md.
   onMount(async () => {
     try {
-      const [boards, users] = await Promise.all([
+      const [boards, users, summaries] = await Promise.all([
         api.get<Board[]>('/boards'),
-        api.get<AssignableUser[]>('/users/assignable')
+        api.get<AssignableUser[]>('/users/assignable'),
+        api.get<UserProgressSummary[]>('/users/progress-summary')
       ]);
       team = users;
+      progressSummaries = summaries;
       boardGroups = await Promise.all(
         boards.map(async (b) => {
           const bigTasks = await api.get<BigTask[]>(`/boards/${b.id}/big-tasks`);
@@ -39,6 +43,9 @@
     }
   });
 
+  $: isSuperUser = $auth.user?.access_level === 'super_user';
+  $: progressByUserId = Object.fromEntries(progressSummaries.map((s) => [s.user_id, s]));
+
   $: stats = computeDashboardStats(aggregateBoards(boardGroups));
   $: ({
     total,
@@ -49,7 +56,7 @@
     won,
     lose,
     completionRate,
-    runningBoards,
+    activeBoards,
     loseBoards,
     nearestDeadline
   } = stats);
@@ -67,7 +74,7 @@
     { name: 'Won', value: won, color: 'var(--win-green)' },
     { name: 'Lose', value: lose, color: 'var(--win-red)' }
   ];
-  $: progressChartData = runningBoards.map((b) => ({
+  $: progressChartData = activeBoards.map((b) => ({
     name: truncateName(b.boardName),
     actual: b.avgActualPct,
     expected: b.avgExpectedPct
@@ -138,7 +145,7 @@
     <div class="section-title">Progress: actual vs expected (%)</div>
     <GroupedBarChart data={progressChartData} />
     <div class="attention-list" style="margin-top:10px">
-      {#each runningBoards as b (b.boardId)}
+      {#each activeBoards as b (b.boardId)}
         <div class="attention-row">
           <div class="attention-main">
             <span class="attention-name">{b.boardName}</span>
@@ -153,8 +160,8 @@
           </span>
         </div>
       {/each}
-      {#if runningBoards.length === 0}
-        <div class="empty-note">Tidak ada project yang sedang berjalan.</div>
+      {#if activeBoards.length === 0}
+        <div class="empty-note">Tidak ada project aktif (semua sudah selesai, atau belum ada project).</div>
       {/if}
     </div>
   </div>
@@ -166,7 +173,7 @@
         <thead><tr><th>Nama project</th><th>Sisa hari</th><th>Actual</th></tr></thead>
         <tbody>
           {#each nearestDeadline as b (b.boardId)}
-            <tr>
+            <tr class:row-overdue={b.daysLeft < 0}>
               <td>{b.boardName}</td>
               <td class="mono {b.daysLeft < 0 ? 'days-late' : ''}">{b.daysLeft}</td>
               <td class="mono">{b.avgActualPct}%</td>
@@ -203,6 +210,8 @@
     <div class="section-title">Tim</div>
     <div class="team-grid">
       {#each team as person (person.id)}
+        {@const prog = progressByUserId[person.id]}
+        {@const showMetrics = isSuperUser || person.id === $auth.user?.id}
         <div class="team-card">
           <div class="team-card-top">
             <Avatar initials={person.initials} size={32} title={person.display_name} />
@@ -211,6 +220,24 @@
               <div class="muted small">{person.roles.join(', ')}</div>
             </div>
           </div>
+          {#if showMetrics && prog}
+            <div class="team-progress">
+              <div class="team-stat-row">
+                <span class="team-stat-pill team-stat-belum">{prog.belum} belum</span>
+                <span class="team-stat-pill team-stat-onprogress">{prog.on_progress} on progress</span>
+                <span class="team-stat-pill team-stat-selesai">{prog.selesai} selesai</span>
+              </div>
+              <div class="team-completion-label">
+                <span class="muted small">Completion rate</span>
+                <span class="mono small">{prog.completion_rate}%</span>
+              </div>
+              <div class="team-completion-bar">
+                <div class="team-completion-fill" style="width:{prog.completion_rate}%"></div>
+              </div>
+            </div>
+          {:else if showMetrics}
+            <div class="team-progress muted small">Tidak ada day entry</div>
+          {/if}
         </div>
       {/each}
     </div>

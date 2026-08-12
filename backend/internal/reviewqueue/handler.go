@@ -21,32 +21,40 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type Item struct {
-	Type        string `json:"type"`
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Reviewed    bool   `json:"reviewed"`
-	BigTaskID   string `json:"big_task_id"`
-	BigTaskName string `json:"big_task_name"`
-	BoardID     string `json:"board_id"`
-	BoardName   string `json:"board_name"`
+	Type                 string `json:"type"`
+	ID                   string `json:"id"`
+	Title                string `json:"title"`
+	SourceDailyTaskTitle string `json:"source_daily_task_title"`
+	Reviewed             bool   `json:"reviewed"`
+	BigTaskID            string `json:"big_task_id"`
+	BigTaskName          string `json:"big_task_name"`
+	BoardID              string `json:"board_id"`
+	BoardName            string `json:"board_name"`
 }
 
-// List mengimplementasikan GET /review-queue (FR-NTF-03). Dibatasi role spv
-// (RequireRole di main.go) dan cuma item_type "daily_task" pada iterasi ini —
-// lihat docs/decision-log/decision-log-review-queue-scope-20260809.md.
-// Cuma item yang BELUM ditinjau yang dikembalikan (sesuai teks FR-NTF-03).
+// List mengimplementasikan GET /review-queue (FR-NTF-03). SEKARANG isinya =
+// TASK REVIEW (daily task hasil clone-review, `review_of_daily_task_id` != NULL)
+// yang PIC-nya = requesting user & belum ditandai ditinjau. Tidak lagi pakai
+// big_task_reviewers/fallback spv (digantikan) -- reviewer = orang yang
+// di-assign lewat clone-review. Kolom source_daily_task_title = daily task asal
+// yang direview. Lihat decision-log-bigtask-members-refactor-20260811.md.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
 	rows, err := h.db.Query(r.Context(), `
-		SELECT dt.id, dt.title, bt.id, bt.name, b.id, b.name
-		FROM daily_tasks dt
-		JOIN big_tasks bt ON bt.id = dt.big_task_id
+		SELECT rt.id, rt.title, COALESCE(src.title, ''), bt.id, bt.name, b.id, b.name
+		FROM daily_tasks rt
+		LEFT JOIN daily_tasks src ON src.id = rt.review_of_daily_task_id
+		JOIN big_tasks bt ON bt.id = rt.big_task_id
 		JOIN boards b ON b.id = bt.board_id
-		WHERE NOT EXISTS (
+		WHERE rt.review_of_daily_task_id IS NOT NULL
+		AND rt.pic_user_id = $1
+		AND NOT EXISTS (
 			SELECT 1 FROM item_reviews ir
-			WHERE ir.item_type = 'daily_task' AND ir.item_id = dt.id
+			WHERE ir.item_type = 'daily_task' AND ir.item_id = rt.id
 		)
-		ORDER BY dt.created_at
-	`)
+		ORDER BY rt.created_at
+	`, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,7 +65,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it Item
 		it.Type = "daily_task"
-		if err := rows.Scan(&it.ID, &it.Title, &it.BigTaskID, &it.BigTaskName, &it.BoardID, &it.BoardName); err != nil {
+		if err := rows.Scan(&it.ID, &it.Title, &it.SourceDailyTaskTitle, &it.BigTaskID, &it.BigTaskName, &it.BoardID, &it.BoardName); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -95,6 +103,24 @@ func (h *Handler) MarkReviewed(w http.ResponseWriter, r *http.Request) {
 	}
 	if !exists {
 		http.Error(w, "daily task tidak ditemukan", http.StatusNotFound)
+		return
+	}
+
+	// Otorisasi eksplisit (bukan cuma nge-trust filter di List): requesting user
+	// harus PIC dari task review ini (daily task hasil clone-review) -- lihat
+	// decision-log-bigtask-members-refactor-20260811.md.
+	var authorized bool
+	if err := h.db.QueryRow(r.Context(), `
+		SELECT EXISTS(
+			SELECT 1 FROM daily_tasks
+			WHERE id = $1 AND pic_user_id = $2 AND review_of_daily_task_id IS NOT NULL
+		)
+	`, itemID, reviewedBy).Scan(&authorized); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !authorized {
+		http.Error(w, "kamu bukan reviewer yang di-assign untuk task review ini", http.StatusForbidden)
 		return
 	}
 
