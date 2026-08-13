@@ -1,7 +1,11 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-go/master/schema/compose-spec.json
 #
-# Untuk deployment server: salin .env.example ke .env, isi CLAUDE_CODE_OAUTH_TOKEN
-# dan CHAT_DEFAULT_CWD, lalu jalankan: docker compose up -d --build
+# Untuk deployment server: salin .env.example ke .env, isi CHAT_DEFAULT_CWD,
+# lalu jalankan: docker compose up -d --build
+#
+# Kredensial Claude dibaca langsung dari ~/.claude di host (mount read-only) —
+# tidak perlu copy/paste token manual. Pastikan user di host sudah login
+# via `claude auth login` sebelum menjalankan service ini.
 services:
   claude-chat-service:
     build: .
@@ -9,22 +13,15 @@ services:
       - "${PORT:-8091}:${PORT:-8091}"
     environment:
       PORT: "${PORT:-8091}"
-      # OAuth token Claude — WAJIB diisi di .env (lihat .env.example).
-      # Cara dapat token: jalankan `claude` CLI di host yang sudah login,
-      # lalu cek ~/.claude/.credentials.json atau gunakan POST /auth/setup-token
-      # saat pertama kali service hidup.
-      CLAUDE_CODE_OAUTH_TOKEN: "${CLAUDE_CODE_OAUTH_TOKEN:-}"
-      # Path direktori project di HOST (bukan di dalam container) yang
-      # otomatis dipakai tiap sesi change request — harus cocok dengan
-      # volume mount di bawah.
       CHAT_DEFAULT_CWD: "${CHAT_DEFAULT_CWD:-/opt/rnd-task-board}"
     volumes:
       # Token store persist lintas restart container.
       - claude-chat-data:/app/data
-      # Mount direktori project dari host supaya claude-chat-service bisa
-      # baca file repo. Path host:container harus identik dengan
-      # CHAT_DEFAULT_CWD di atas (supaya path yang dikirim client valid
-      # di dalam container).
+      # Kredensial Claude dari host — service baca OAuth token langsung
+      # dari sini tanpa perlu copy/paste manual.
+      - ~/.claude:/root/.claude:ro
+      # Mount direktori project dari host (path harus identik dengan
+      # CHAT_DEFAULT_CWD supaya path yang dikirim client valid di dalam container).
       - "${CHAT_DEFAULT_CWD:-/opt/rnd-task-board}:${CHAT_DEFAULT_CWD:-/opt/rnd-task-board}:ro"
 
 volumes:
