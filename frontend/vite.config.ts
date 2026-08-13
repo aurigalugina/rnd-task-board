@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [sveltekit()],
   server: {
     host: true,
+    allowedHosts: ['rndops.ppsrnd.cloud'],
     proxy: {
       // Default localhost:8080 buat dev lokal biasa (npm run dev di host).
       // Di docker-compose.dev.yml, frontend jalan di container sendiri jadi
