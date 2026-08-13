@@ -28,6 +28,7 @@ services:
       DATABASE_URL: postgres://rndops:rndops@postgres:5432/rndops?sslmode=disable
       JWT_SECRET: dev-secret-change-me
       PORT: "8080"
+      APP_ENV: production
       UPLOAD_DIR: /app/uploads
       # myagenda-service itu sub-project TERPISAH (compose/network sendiri,
       # lihat myagenda-service/docker-compose.yml) -- dijangkau lewat host,
