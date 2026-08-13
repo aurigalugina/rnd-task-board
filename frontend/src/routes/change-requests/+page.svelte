@@ -6,11 +6,19 @@
   import { crStatusLabel, crStatusTone, CR_TRIAGE_TARGETS } from '$lib/changeRequest';
   import ChangeRequestChat from '$lib/components/ChangeRequestChat.svelte';
   import { chatSession, beginSetup } from '$lib/stores/chatSessionStore';
+  import { renderMarkdown } from '$lib/markdown';
+  import { MessageSquare } from 'lucide-svelte';
 
   let items: ChangeRequest[] = [];
   let loading = true;
   let error: string | null = null;
+  // Dua toggle independen per item -- "Lihat percakapan" (raw_conversation,
+  // seluruh transcript chat) dan "Lihat dokumen" (document_md, hasil "Susun
+  // change request" -- cuma ada tombolnya kalau field-nya terisi). Keduanya
+  // dirender lewat renderMarkdown() + class global .cr-md (app.css), bukan
+  // <pre> plain text lagi -- lihat keluhan user soal transcript kebaca mentah.
   let expanded: string | null = null;
+  let expandedDoc: string | null = null;
   let triagingId: string | null = null;
 
   // Panel chat tampil selama sesi belum 'idle'. step HIDUP di store level modul,
@@ -87,11 +95,20 @@
             <span class="badge badge-{crStatusTone(cr.status)}">{crStatusLabel(cr.status)}</span>
             <span class="cr-item-by">{cr.submitted_by_name}</span>
             <span class="muted small">{fmtDate(cr.created_at)}</span>
-            <button
-              class="quick-btn cr-toggle"
-              on:click={() => (expanded = expanded === cr.id ? null : cr.id)}>
-              {expanded === cr.id ? 'Tutup' : 'Lihat percakapan'}
-            </button>
+            <div class="cr-item-actions">
+              {#if cr.document_md}
+                <button
+                  class="quick-btn"
+                  on:click={() => (expandedDoc = expandedDoc === cr.id ? null : cr.id)}>
+                  {expandedDoc === cr.id ? 'Tutup dokumen' : 'Lihat dokumen'}
+                </button>
+              {/if}
+              <button
+                class="quick-btn"
+                on:click={() => (expanded = expanded === cr.id ? null : cr.id)}>
+                {expanded === cr.id ? 'Tutup' : 'Lihat percakapan'}
+              </button>
+            </div>
           </div>
 
           {#if cr.reviewed_by_name}
@@ -100,8 +117,16 @@
             </div>
           {/if}
 
+          {#if expandedDoc === cr.id && cr.document_md}
+            <div class="cr-doc-box">
+              <div class="cr-md">{@html renderMarkdown(cr.document_md)}</div>
+            </div>
+          {/if}
+
           {#if expanded === cr.id}
-            <pre class="cr-transcript">{cr.raw_conversation}</pre>
+            <div class="cr-doc-box">
+              <div class="cr-md">{@html renderMarkdown(cr.raw_conversation)}</div>
+            </div>
           {/if}
 
           {#if canTriage}
@@ -121,7 +146,7 @@
       {/each}
       {#if items.length === 0}
         <div class="empty-state">
-          <div class="empty-state-icon">💬</div>
+          <div class="empty-state-icon"><MessageSquare size={36} /></div>
           <div class="empty-state-text">Belum ada usulan perubahan. Klik "Ajukan usulan" buat mulai.</div>
         </div>
       {/if}
@@ -144,6 +169,10 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    /* Flex item default min-width:auto -- tanpa ini, item melebar ngikutin
+       baris terpanjang di dalam .cr-doc-box (dokumen/transcript) alih-alih
+       teksnya yang wrap ke lebar container, bikin overflow ke kanan. */
+    min-width: 0;
   }
   .cr-item-head {
     display: flex;
@@ -153,19 +182,20 @@
   .cr-item-by {
     font-weight: bold;
   }
-  .cr-toggle {
+  .cr-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin-left: auto;
   }
-  .cr-transcript {
-    white-space: pre-wrap;
-    word-break: break-word;
+  .cr-doc-box {
     background: var(--content-bg);
     border: 1px solid var(--content-alt);
     padding: 8px;
     max-height: 320px;
     overflow-y: auto;
+    overflow-x: auto;
     font-size: 11px;
-    margin: 0;
   }
   .cr-triage {
     display: flex;

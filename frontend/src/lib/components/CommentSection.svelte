@@ -26,7 +26,7 @@
   let showMentions = false;
   let sending = false;
   let sectionEl: HTMLDivElement;
-  let inputEl: HTMLInputElement;
+  let inputEl: HTMLTextAreaElement;
 
   $: authorNameById = Object.fromEntries(assignableUsers.map((u) => [u.id, u.display_name]));
   $: mentionNames = assignableUsers.map((u) => u.display_name);
@@ -156,14 +156,15 @@
       </div>
       <div class="comment-composer-row comment-input-wrap">
         <div class="comment-input-relative">
-          <input
+          <textarea
             bind:this={inputEl}
-            class="inline-input"
-            placeholder="Tulis komentar... ketik @ buat mention"
+            class="inline-input comment-textarea"
+            rows="3"
+            placeholder="Tulis komentar... ketik @ buat mention&#10;(Enter = kirim, Shift+Enter = baris baru)"
             bind:value={text}
             on:focus={() => (showMentions = true)}
             on:blur={() => setTimeout(() => (showMentions = false), 150)}
-            on:keydown={(e) => e.key === 'Enter' && send()}
+            on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           />
           {#if showMentions && query !== null && mentionSuggestions.length > 0}
             <div class="mention-popup">

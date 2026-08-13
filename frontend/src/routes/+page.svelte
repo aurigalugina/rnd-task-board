@@ -118,7 +118,7 @@
             <div class="chart-legend-row">
               <span class="chart-legend-swatch" style="background:{d.color}" />
               <span class="small">{d.name}</span>
-              <span class="mono small" style="margin-left:auto">{d.value}</span>
+              <span class="mono small">{d.value}</span>
             </div>
           {/each}
         </div>
@@ -133,7 +133,7 @@
             <div class="chart-legend-row">
               <span class="chart-legend-swatch" style="background:{d.color}" />
               <span class="small">{d.name}</span>
-              <span class="mono small" style="margin-left:auto">{d.value}</span>
+              <span class="mono small">{d.value}</span>
             </div>
           {/each}
         </div>

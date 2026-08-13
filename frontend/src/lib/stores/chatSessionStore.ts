@@ -39,6 +39,11 @@ export type ChatState = {
   costUsd: number;
   claudeSessionId: string | null;
   error: string | null;
+  // Dokumen change_request.md hasil "Susun change request" -- diisi otomatis
+  // begitu turn balasan compile() itu selesai (lihat awaitingCompileTurn di
+  // bawah), TERPISAH dari messages/transcript. Disimpan ke document_md saat
+  // "Simpan sebagai change request" (raw_conversation tetap seluruh chat).
+  compiledDocument: string | null;
 };
 
 const initialState: ChatState = {
@@ -51,7 +56,8 @@ const initialState: ChatState = {
   starting: false,
   costUsd: 0,
   claudeSessionId: null,
-  error: null
+  error: null,
+  compiledDocument: null
 };
 
 const store = writable<ChatState>({ ...initialState });
@@ -61,6 +67,12 @@ export const chatSession = { subscribe: store.subscribe };
 let ws: WebSocket | null = null;
 let intentionalClose = false;
 let configLoaded = false;
+// Ditandai true tepat sebelum compile() kirim COMPILE_PROMPT, dikonsumsi pas
+// event 'result' turn itu selesai (lihat onWsMessage) -- aman dari race
+// karena sendPrompt() sendiri sudah nge-guard "busy" (gak bisa kirim prompt
+// baru sebelum turn sebelumnya kelar), jadi 'result' BERIKUTNYA abis compile()
+// dipanggil PASTI punya balasan buat compile ini, bukan turn lain.
+let awaitingCompileTurn = false;
 
 function patch(p: Partial<ChatState>) {
   store.update((s) => ({ ...s, ...p }));
@@ -148,11 +160,17 @@ function onWsMessage(event: MessageEvent) {
 
   for (const ev of parseSdkMessage(data.message)) {
     store.update((s) => {
-      const next: Partial<ChatState> = { messages: appendChatEvent(s.messages, ev) };
+      const messages = appendChatEvent(s.messages, ev);
+      const next: Partial<ChatState> = { messages };
       if (ev.kind === 'result') {
         next.busy = false;
         if (typeof ev.costUsd === 'number') next.costUsd = ev.costUsd;
         if (ev.sessionId) next.claudeSessionId = ev.sessionId;
+        if (awaitingCompileTurn) {
+          awaitingCompileTurn = false;
+          const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+          if (lastAssistant?.text) next.compiledDocument = lastAssistant.text;
+        }
       }
       return { ...s, ...next };
     });
@@ -168,21 +186,25 @@ function onWsClose() {
 
 export type PromptImage = { media_type: string; data: string }; // data = base64 mentah
 
-export function sendPrompt(text: string, images: PromptImage[] = []) {
+// Balikin true kalau prompt beneran terkirim (dipakai compile() buat mastiin
+// awaitingCompileTurn cuma diset kalau kirimnya sukses -- lihat komentar di
+// deklarasi awaitingCompileTurn).
+export function sendPrompt(text: string, images: PromptImage[] = []): boolean {
   const t = text.trim();
   const s = snapshot();
   // Boleh kirim kalau ada teks ATAU minimal satu gambar (screenshot tanpa teks).
-  if (!ws || ws.readyState !== WebSocket.OPEN || s.busy || (!t && images.length === 0)) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN || s.busy || (!t && images.length === 0)) return false;
   const displayUrls = images.map((i) => `data:${i.media_type};base64,${i.data}`);
   patch({
     messages: [...s.messages, { role: 'user', text: t, images: displayUrls.length ? displayUrls : undefined }],
     busy: true
   });
   ws.send(JSON.stringify({ type: 'prompt', text: t, images: images.length ? images : undefined }));
+  return true;
 }
 
 export function compile() {
-  sendPrompt(COMPILE_PROMPT);
+  if (sendPrompt(COMPILE_PROMPT)) awaitingCompileTurn = true;
 }
 
 export function interrupt() {
@@ -206,6 +228,12 @@ export async function closeSession() {
   teardownSocket();
   if (s.session) chatApi.closeSession(s.session.id).catch(() => {});
   store.set({ ...initialState });
+  // configLoaded HARUS ikut di-reset di sini (bukan cuma resetAll/logout) --
+  // tanpa ini, beginSetup() abis "Akhiri sesi" skip fetch config lagi (karena
+  // configLoaded masih true dari sesi sebelumnya) dan pakai cwd/configuredCwd
+  // hasil reset (kosong/false) -- muncul salah kaprah "CHAT_DEFAULT_CWD belum
+  // di-set di backend" padahal backend-nya beres, cuma cache frontend basi.
+  configLoaded = false;
 }
 
 // cancelSetup: batal dari layar setup (belum ada sesi). Tidak menyentuh WS.
@@ -213,8 +241,8 @@ export function cancelSetup() {
   patch({ step: 'idle', error: null });
 }
 
-// resetAll dipanggil saat logout — pastikan sesi tidak menggantung.
+// resetAll dipanggil saat logout — pastikan sesi tidak menggantung. configLoaded
+// sudah ikut di-reset di closeSession() sendiri, gak perlu diulang di sini.
 export function resetAll() {
-  configLoaded = false;
   closeSession();
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { reviewQueue, loadReviewQueue, markItemReviewed, type QueueItem } from '$lib/stores/reviewQueueStore';
+  import { Check, CheckCheck } from 'lucide-svelte';
 
   let loading = true;
   let error: string | null = null;
@@ -50,13 +51,13 @@
             <div class="muted small">{item.board_name} / {item.big_task_name}</div>
           </a>
           <button class="approve-btn" on:click={() => markReviewed(item)} disabled={markingId === item.id}>
-            ✓ {markingId === item.id ? 'Menyimpan...' : 'Sudah ditinjau'}
+            <Check size={13} />&nbsp;{markingId === item.id ? 'Menyimpan...' : 'Sudah ditinjau'}
           </button>
         </div>
       {/each}
       {#if $reviewQueue.length === 0}
         <div class="empty-state">
-          <div class="empty-state-icon">✓</div>
+          <div class="empty-state-icon"><CheckCheck size={36} /></div>
           <div class="empty-state-text">Semua task sudah ditinjau.</div>
         </div>
       {/if}

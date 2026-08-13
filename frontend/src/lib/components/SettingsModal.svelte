@@ -4,6 +4,7 @@
   import { auth } from '$lib/stores/authStore';
   import { theme, THEMES } from '$lib/stores/themeStore';
   import type { AccessLevel, ManagedUser, NotificationSettings, ReferensiTim, ReferensiUserHR, Role } from '$lib/types';
+  import { X, Bot, Smartphone, Settings as SettingsIcon, CircleCheck, CircleX, Clock, Check } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -336,7 +337,7 @@
   >
     <div class="panel-header">
       <span class="titlebar-title" style="font-size:11px">Settings</span>
-      <button class="icon-btn" on:click={() => dispatch('close')} aria-label="Tutup">✕</button>
+      <button class="icon-btn" on:click={() => dispatch('close')} aria-label="Tutup"><X size={13} /></button>
     </div>
     <div class="settings-tabs">
       {#if canManage}
@@ -524,12 +525,12 @@
           {#if canManage}
             <!-- BOT TOKEN — admin only -->
             <div class="ref-section">
-              <div class="section-title">🤖 Konfigurasi Bot Telegram (Admin)</div>
+              <div class="section-title"><Bot size={13} />&nbsp;Konfigurasi Bot Telegram (Admin)</div>
               <p class="small muted" style="margin:0">Token bot global — dipakai untuk semua user. Buat bot baru via <b>@BotFather</b> di Telegram, lalu copy token-nya ke sini.</p>
               <div class="ref-row">
                 <input class="inline-input" type="password" placeholder="1234567890:AAxxxxxxxx..." bind:value={botToken} style="flex:1;font-family:monospace" />
                 <button class="quick-btn quick-btn-done" on:click={saveBotToken} disabled={botTokenSaving}>
-                  {botTokenSaving ? 'Menyimpan...' : botTokenSaved ? '✓ Tersimpan' : 'Simpan'}
+                  {botTokenSaving ? 'Menyimpan...' : botTokenSaved ? 'Tersimpan' : 'Simpan'}
                 </button>
               </div>
               {#if botTokenError}<p class="small" style="color:var(--win-red);margin:0">{botTokenError}</p>{/if}
@@ -538,7 +539,7 @@
 
           <!-- TELEGRAM SETUP USER -->
           <div class="ref-section">
-            <div class="section-title">📲 Setup Telegram</div>
+            <div class="section-title"><Smartphone size={13} />&nbsp;Setup Telegram</div>
             <div class="notif-guide">
               <b>Cara mendapatkan Chat ID:</b>
               <ol class="notif-guide-steps">
@@ -561,18 +562,21 @@
 
           <!-- PREFERENSI ALERT -->
           <div class="ref-section">
-            <div class="section-title">⚙️ Preferensi Alert</div>
+            <div class="section-title"><SettingsIcon size={13} />&nbsp;Preferensi Alert</div>
             <label class="notif-toggle-row">
               <input type="checkbox" bind:checked={notifSettings.notify_sign_off_ready} />
-              <span class="small">✅ Sign-off siap — Big Task sudah 100%, menunggu SPV sign-off</span>
+              <CircleCheck size={13} style="color:var(--win-green);flex-shrink:0" />
+              <span class="small">Sign-off siap — Big Task sudah 100%, menunggu SPV sign-off</span>
             </label>
             <label class="notif-toggle-row">
               <input type="checkbox" bind:checked={notifSettings.notify_verdict_lose} />
-              <span class="small">⛔ Verdict Lose — deadline lewat, task belum selesai</span>
+              <CircleX size={13} style="color:var(--win-red);flex-shrink:0" />
+              <span class="small">Verdict Lose — deadline lewat, task belum selesai</span>
             </label>
             <label class="notif-toggle-row">
               <input type="checkbox" bind:checked={notifSettings.notify_deadline_soon} />
-              <span class="small">⏰ Deadline dekat — dalam N hari ke depan</span>
+              <Clock size={13} style="color:var(--win-amber);flex-shrink:0" />
+              <span class="small">Deadline dekat — dalam N hari ke depan</span>
             </label>
             <div class="ref-row" style="margin-top:4px">
               <span class="small muted" style="min-width:120px">Batas deadline (hari)</span>
@@ -588,7 +592,7 @@
 
           {#if notifError}<p class="small" style="color:var(--win-red);margin:0">{notifError}</p>{/if}
           <button class="quick-btn quick-btn-done" on:click={saveNotifSettings} disabled={notifSaving} style="align-self:flex-start">
-            {notifSaving ? 'Menyimpan...' : notifSaved ? '✓ Tersimpan' : 'Simpan pengaturan notifikasi'}
+            {notifSaving ? 'Menyimpan...' : notifSaved ? 'Tersimpan' : 'Simpan pengaturan notifikasi'}
           </button>
         {/if}
       {:else}

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +21,7 @@ import (
 	"rndops/backend/internal/cheatsheet"
 	"rndops/backend/internal/comment"
 	"rndops/backend/internal/dailytask"
+	"rndops/backend/internal/dataport"
 	"rndops/backend/internal/notification"
 	"rndops/backend/internal/referensi"
 	"rndops/backend/internal/reviewqueue"
@@ -27,6 +29,16 @@ import (
 	"rndops/backend/internal/user"
 	"rndops/backend/internal/weeklyplan"
 )
+
+func splitTrimmed(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
 
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
@@ -50,8 +62,14 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	allowedOrigins := []string{"http://localhost:5173", "http://localhost:8080"}
+	if extra := os.Getenv("ALLOWED_ORIGINS"); extra != "" {
+		for _, o := range splitTrimmed(extra) {
+			allowedOrigins = append(allowedOrigins, o)
+		}
+	}
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:8080"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -80,6 +98,7 @@ func main() {
 	referensiHandler := referensi.NewHandler(pool)
 	changeRequestHandler := changerequest.NewHandler(pool)
 	notificationHandler := notification.NewHandler(pool)
+	dataportHandler := dataport.NewHandler(pool)
 
 	// Background goroutine: kirim Telegram digest alert setiap 15 menit.
 	// Goroutine ini mati kalau proses backend mati — acceptable buat internal tool.
@@ -126,6 +145,7 @@ func main() {
 				spvOnly.Use(auth.RequireRole("spv"))
 				spvOnly.Post("/big-tasks/{bigTaskID}/sign-off", bigTaskHandler.SignOff)
 				spvOnly.Delete("/big-tasks/{bigTaskID}/sign-off", bigTaskHandler.UndoSignOff)
+				spvOnly.Patch("/big-tasks/{bigTaskID}/on-hold", bigTaskHandler.ToggleOnHold)
 			})
 
 			// Review Queue: semua user login boleh akses, hasilnya di-filter per
@@ -168,6 +188,10 @@ func main() {
 				triage.Use(auth.RequireRole("spv", "sa"))
 				triage.Patch("/change-requests/{id}", changeRequestHandler.Update)
 			})
+
+			// Data import/export (super_user only — cek in-handler).
+			protected.Get("/admin/export", dataportHandler.Export)
+			protected.Post("/admin/import", dataportHandler.Import)
 
 			protected.Get("/notifications", notificationHandler.ListAlerts)
 			protected.Get("/notifications/settings", notificationHandler.GetSettings)

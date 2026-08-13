@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client';
   import { auth } from '$lib/stores/authStore';
   import type { ArchivedBoard } from '$lib/types';
+  import { Archive, Undo2 } from 'lucide-svelte';
 
   // Board Archive -- cuma super_user (lihat decision-log-board-archive-20260812.md).
   // Board yang di-archive HILANG dari Dashboard & tab Boards (GET /boards
@@ -67,13 +68,13 @@
             <div class="muted small">Diarsipkan oleh {board.archived_by_name || '—'} · {fmtDate(board.archived_at)}</div>
           </div>
           <button class="approve-btn" on:click={() => unarchive(board)} disabled={unarchivingId === board.id}>
-            ↩ {unarchivingId === board.id ? 'Memproses...' : 'Unarchive'}
+            <Undo2 size={13} />&nbsp;{unarchivingId === board.id ? 'Memproses...' : 'Unarchive'}
           </button>
         </div>
       {/each}
       {#if boards.length === 0}
         <div class="empty-state">
-          <div class="empty-state-icon">🗄</div>
+          <div class="empty-state-icon"><Archive size={36} /></div>
           <div class="empty-state-text">Belum ada board yang diarsipkan.</div>
         </div>
       {/if}

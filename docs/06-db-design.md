@@ -162,13 +162,13 @@ Keberadaan baris pada tabel ini = Big Task berstatus signed. Undo sign-off = hap
 
 Constraint: unique `(big_task_id, week_start)` — inilah kunci upsert yang dirujuk pada FR-WKL-05.
 
-### 3.12 `change_requests` (disiapkan, belum dipakai UI pada Fase 1)
+### 3.12 `change_requests`
 | Kolom | Tipe | Keterangan |
 |---|---|---|
 | id | uuid | PK |
 | submitted_by | uuid | FK → users.id |
-| raw_conversation | text | Percakapan mentah sebelum disusun terstruktur |
-| structured_doc_path | text | Nullable; path relatif ke `change_request.md` hasil penyusunan |
+| raw_conversation | text | Transcript percakapan penuh (markdown, dari `buildTranscript()`) |
+| document_md | text | Nullable; markdown INLINE dokumen `change_request.md` hasil "Susun change request" (rename dari `structured_doc_path` migration `0021` — niat awal path file di disk tidak jadi dipakai, lihat decision-log-change-request-document-20260812.md) |
 | status | text | Enum aplikatif: `pending` \| `approved` \| `rejected` \| `scheduled` |
 | reviewed_by | uuid | FK → users.id, nullable |
 | reviewed_at | timestamptz | Nullable |

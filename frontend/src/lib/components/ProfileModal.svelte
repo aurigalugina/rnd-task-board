@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { X } from 'lucide-svelte';
   import { api } from '$lib/api/client';
   import { auth } from '$lib/stores/authStore';
 
@@ -54,7 +55,7 @@
   <div class="modal-box" role="dialog" aria-modal="true" aria-label="My Profile" on:click|stopPropagation>
     <div class="panel-header">
       <span class="titlebar-title" style="font-size:11px">My Profile</span>
-      <button class="icon-btn" on:click={() => dispatch('close')} aria-label="Tutup">✕</button>
+      <button class="icon-btn" on:click={() => dispatch('close')} aria-label="Tutup"><X size={13} /></button>
     </div>
     <div class="modal-body">
       <div class="panel-field">

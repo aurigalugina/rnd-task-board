@@ -11,6 +11,7 @@
   import { chatSession } from '$lib/stores/chatSessionStore';
   import ProfileModal from '$lib/components/ProfileModal.svelte';
   import SettingsModal from '$lib/components/SettingsModal.svelte';
+  import { Bell, User, Archive, Database, Settings, LogOut } from 'lucide-svelte';
 
   onMount(() => {
     auth.init();
@@ -73,9 +74,9 @@
   }
 
   const alertLabel: Record<string, string> = {
-    sign_off_ready: '✅ Sign-off siap',
-    verdict_lose:   '⛔ Verdict Lose',
-    deadline_soon:  '⏰ Deadline dekat',
+    sign_off_ready: 'Sign-off siap',
+    verdict_lose:   'Verdict Lose',
+    deadline_soon:  'Deadline dekat',
   };
   function toggleUserMenu() {
     showUserMenu = !showUserMenu;
@@ -127,7 +128,7 @@
         <div class="topbar-right">
           <div class="notif-wrap">
             <button class="icon-only-btn" on:click={toggleNotif} aria-label="Notifikasi">
-              🔔
+              <Bell size={16} />
               {#if totalBadge > 0}<span class="notif-badge">{totalBadge}</span>{/if}
             </button>
             {#if showNotif}
@@ -161,7 +162,7 @@
                   <div class="empty-note">Tidak ada yang perlu ditinjau.</div>
                 {/if}
                 {#if $alerts.length === 0 && pendingReview === 0}
-                  <div class="empty-note">Semua aman 👍</div>
+                  <div class="empty-note">Semua aman</div>
                 {/if}
                 <a class="quick-btn" style="width:100%;margin-top:6px;box-sizing:border-box;text-decoration:none;text-align:center" href="/review-queue" on:click={() => (showNotif = false)}>
                   Buka Review Queue
@@ -184,19 +185,22 @@
                 </div>
                 <div class="dropdown-divider" />
                 <button class="dropdown-item" on:click={() => { showProfile = true; showUserMenu = false; }}>
-                  👤 My Profile
+                  <User size={13} />&nbsp;My Profile
                 </button>
                 {#if isSuperUser}
                   <a class="dropdown-item" href="/boards/archive" on:click={() => (showUserMenu = false)}>
-                    🗄 Board Archive
+                    <Archive size={13} />&nbsp;Board Archive
+                  </a>
+                  <a class="dropdown-item" href="/import-export" on:click={() => (showUserMenu = false)}>
+                    <Database size={13} />&nbsp;Import / Export
                   </a>
                 {/if}
                 <button class="dropdown-item" on:click={() => { showSettings = true; showUserMenu = false; }}>
-                  ⚙️ Settings
+                  <Settings size={13} />&nbsp;Settings
                 </button>
                 <div class="dropdown-divider" />
                 <button class="dropdown-item dropdown-item-danger" on:click={handleLogout}>
-                  ↪ Sign out
+                  <LogOut size={13} />&nbsp;Sign out
                 </button>
               </div>
             {/if}

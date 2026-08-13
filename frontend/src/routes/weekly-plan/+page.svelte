@@ -4,6 +4,7 @@
   import { auth } from '$lib/stores/authStore';
   import { getWeekStart, shiftWeek, weekEnd } from '$lib/dateRange';
   import type { AssignableUser, TeamStatusRow } from '$lib/types';
+  import { X } from 'lucide-svelte';
 
   // Granularitas PER DAILY TASK. TglRencana/DueDate/UraianTask = preview
   // persis payload HR — ditampilkan di modal "Lihat" tanpa fetch tambahan.
@@ -220,7 +221,7 @@
     <div class="modal-box wp-preview-modal" role="dialog" on:click|stopPropagation>
       <div class="titlebar" style="border-radius:4px 4px 0 0">
         <span>Pratinjau Data HR — {previewRow.daily_task_title}</span>
-        <button class="modal-close" on:click={closePreview}>✕</button>
+        <button class="modal-close" on:click={closePreview}><X size={13} /></button>
       </div>
 
       <div class="wp-preview-body">

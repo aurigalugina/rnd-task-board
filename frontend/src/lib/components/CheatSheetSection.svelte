@@ -3,6 +3,7 @@
   import { api, downloadBlob } from '$lib/api/client';
   import type { AssignableUser, CheatSheetItem } from '$lib/types';
   import Avatar from './Avatar.svelte';
+  import { FileText, Link2, NotebookPen, Download } from 'lucide-svelte';
 
   export let boardId: string;
 
@@ -85,9 +86,7 @@
     }
   }
 
-  function typeIcon(t: CheatSheetItem['type']): string {
-    return { file: '📄', url: '🔗', note: '📝' }[t];
-  }
+  const typeIconMap = { file: FileText, url: Link2, note: NotebookPen };
 
   function originalFilename(value: string): string {
     return value.replace(/^[0-9a-f-]{36}_/, '');
@@ -119,14 +118,14 @@
       {#each items as it (it.id)}
         {@const author = authorById[it.author_id]}
         <div class="cheatsheet-row">
-          <div class="cheatsheet-icon">{typeIcon(it.type)}</div>
+          <div class="cheatsheet-icon"><svelte:component this={typeIconMap[it.type]} size={14} /></div>
           <div class="cheatsheet-main">
             <div class="cheatsheet-title">{it.title}</div>
             {#if it.type === 'url'}
               <a class="cheatsheet-link" href={it.value} target="_blank" rel="noreferrer">{it.value}</a>
             {:else if it.type === 'file'}
               <button class="cheatsheet-link cheatsheet-download" on:click={() => download(it)}>
-                ⬇ {originalFilename(it.value)}
+                <Download size={12} />&nbsp;{originalFilename(it.value)}
               </button>
             {:else}
               <span class="cheatsheet-note">{it.value}</span>
@@ -150,13 +149,13 @@
       <div class="inline-form inline-form-daily">
         <div class="role-filter-pills">
           <button class="role-filter-pill {type === 'note' ? 'role-filter-pill-active' : ''}" on:click={() => (type = 'note')}>
-            📝 Catatan
+            <NotebookPen size={12} />&nbsp;Catatan
           </button>
           <button class="role-filter-pill {type === 'url' ? 'role-filter-pill-active' : ''}" on:click={() => (type = 'url')}>
-            🔗 URL
+            <Link2 size={12} />&nbsp;URL
           </button>
           <button class="role-filter-pill {type === 'file' ? 'role-filter-pill-active' : ''}" on:click={() => (type = 'file')}>
-            📄 File
+            <FileText size={12} />&nbsp;File
           </button>
         </div>
         <input class="inline-input" placeholder="Judul, misal: Deploy Host to Host" bind:value={title} />

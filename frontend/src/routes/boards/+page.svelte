@@ -6,6 +6,14 @@
   import { auth } from '$lib/stores/authStore';
   import type { Board } from '$lib/types';
   import BigTaskList from '$lib/components/BigTaskList.svelte';
+  import { Archive, X } from 'lucide-svelte';
+
+  function handlePageKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      if (confirmingArchive && !archiving) confirmingArchive = false;
+      else if (showCreateForm && !creating) showCreateForm = false;
+    }
+  }
 
   let boards: Board[] = [];
   let loading = true;
@@ -60,9 +68,7 @@
     }
   }
 
-  function handleArchiveModalKeydown(e: KeyboardEvent) {
-    if (confirmingArchive && e.key === 'Escape' && !archiving) confirmingArchive = false;
-  }
+  function handleArchiveModalKeydown(_e: KeyboardEvent) { /* handled by handlePageKeydown */ }
 
   async function archiveBoard() {
     if (!selectedBoardId) return;
@@ -96,23 +102,13 @@
           {board.name}
         </button>
       {/each}
-      {#if !showCreateForm}
-        <button class="board-pill board-pill-ghost" on:click={() => (showCreateForm = true)}>+ Board baru</button>
-      {/if}
+      <button class="board-pill board-pill-ghost" on:click={() => (showCreateForm = true)}>+ Board baru</button>
     </div>
     {#if isSuperUser && selectedBoardId}
-      <button class="quick-btn" on:click={() => (confirmingArchive = true)}>🗄 Archive board</button>
+      <button class="quick-btn" on:click={() => (confirmingArchive = true)}><Archive size={13} />&nbsp;Archive board</button>
     {/if}
   </div>
 
-  {#if showCreateForm}
-    <form class="inline-form" on:submit|preventDefault={createBoard}>
-      <input class="inline-input" style="width:180px" placeholder="Nama board" bind:value={name} required />
-      <input class="inline-input" style="width:260px" placeholder="Deskripsi board" bind:value={description} />
-      <button class="quick-btn quick-btn-done" type="submit" disabled={creating}>{creating ? 'Menyimpan...' : 'Simpan'}</button>
-      <button class="quick-btn" type="button" on:click={() => (showCreateForm = false)}>Batal</button>
-    </form>
-  {/if}
   {#if createError}<p class="small" style="color:var(--win-red)">{createError}</p>{/if}
 
   {#if selectedBoardId}
@@ -122,7 +118,41 @@
   {/if}
 {/if}
 
-<svelte:window on:keydown={handleArchiveModalKeydown} />
+<svelte:window on:keydown={handlePageKeydown} />
+
+<!-- Modal buat board baru -->
+{#if showCreateForm}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="overlay overlay-center" on:click={() => !creating && (showCreateForm = false)}>
+    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <div class="modal-box" role="dialog" aria-modal="true" on:click|stopPropagation style="width:400px;max-width:calc(100vw - 32px)">
+      <div class="de-modal-header">
+        <span class="de-modal-title">Board baru</span>
+        <button class="de-close-btn icon-btn" aria-label="Tutup" on:click={() => (showCreateForm = false)}><X size={12} /></button>
+      </div>
+      <div class="modal-body">
+        <form on:submit|preventDefault={createBoard}>
+          <div class="panel-field">
+            <label class="small muted" for="board-name">Nama board</label>
+            <input id="board-name" class="inline-input" placeholder="Nama board" bind:value={name} required />
+          </div>
+          <div class="panel-field">
+            <label class="small muted" for="board-desc">Deskripsi</label>
+            <input id="board-desc" class="inline-input" placeholder="Deskripsi singkat" bind:value={description} />
+          </div>
+          {#if createError}<p class="small" style="color:var(--win-red);margin:0">{createError}</p>{/if}
+          <div class="inline-form-actions" style="padding-top:4px">
+            <button class="quick-btn quick-btn-done" type="submit" disabled={creating}>
+              {creating ? 'Menyimpan...' : 'Buat board'}
+            </button>
+            <button class="quick-btn" type="button" on:click={() => (showCreateForm = false)}>Batal</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if confirmingArchive}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -133,7 +163,7 @@
     <div class="modal-box" role="dialog" aria-modal="true" aria-label="Archive board" on:click|stopPropagation>
       <div class="panel-header">
         <span class="titlebar-title" style="font-size:11px">Archive board</span>
-        <button class="icon-btn" on:click={() => (confirmingArchive = false)} aria-label="Tutup" disabled={archiving}>✕</button>
+        <button class="icon-btn" on:click={() => (confirmingArchive = false)} aria-label="Tutup" disabled={archiving}><X size={13} /></button>
       </div>
       <div class="modal-body">
         <p class="small">

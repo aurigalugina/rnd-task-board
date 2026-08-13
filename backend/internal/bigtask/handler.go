@@ -393,6 +393,27 @@ func (h *Handler) SignOff(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(bt)
 }
 
+// ToggleOnHold mengimplementasikan PATCH /big-tasks/{bigTaskID}/on-hold —
+// toggle on_hold flag. Task yang on_hold tidak masuk hitungan status
+// not_started/running tapi tidak di-drop dari progress agregat.
+func (h *Handler) ToggleOnHold(w http.ResponseWriter, r *http.Request) {
+	bigTaskID := chi.URLParam(r, "bigTaskID")
+	_, err := h.db.Exec(r.Context(), `
+		UPDATE big_tasks SET on_hold = NOT on_hold, updated_at = now() WHERE id = $1
+	`, bigTaskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	bt, err := loadBigTask(r.Context(), h.db, bigTaskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bt)
+}
+
 // UndoSignOff mengimplementasikan DELETE /big-tasks/{big_task_id}/sign-off (SRS FR-BRD-08).
 func (h *Handler) UndoSignOff(w http.ResponseWriter, r *http.Request) {
 	bigTaskID := chi.URLParam(r, "bigTaskID")

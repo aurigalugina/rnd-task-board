@@ -4,6 +4,7 @@
   import { chatApi, type BrowseResult } from '$lib/chatClient';
   import { buildTranscript, isSupportedImageType } from '$lib/chatMessages';
   import { renderMarkdown } from '$lib/markdown';
+  import { Folder, FolderUp, Wrench, X, Paperclip, NotebookPen } from 'lucide-svelte';
   import {
     chatSession,
     startSession,
@@ -150,7 +151,13 @@
     saving = true;
     savedNote = false;
     try {
-      await api.post('/change-requests', { raw_conversation: transcript });
+      // document_md = respons terakhir Claude abis "Susun change request"
+      // (terpisah dari raw_conversation/transcript penuh) -- null kalau user
+      // belum pernah klik itu, list-page cukup nampilin transcript-nya saja.
+      await api.post('/change-requests', {
+        raw_conversation: transcript,
+        document_md: $chatSession.compiledDocument
+      });
       savedNote = true;
       dispatch('saved'); // biar list di halaman ke-refresh; sesi TETAP hidup
     } catch (e) {
@@ -200,12 +207,12 @@
             <div class="cr-picker-head">
               <span class="mono small">{browseState.path}</span>
               <button class="quick-btn" on:click={() => browseState && browseTo(browseState.parent)}
-                >⬆ Naik</button
+                ><FolderUp size={13} />&nbsp;Naik</button
               >
             </div>
             <div class="cr-picker-list">
               {#each browseState.directories as d (d.path)}
-                <button class="cr-picker-item" on:click={() => browseTo(d.path)}>📁 {d.name}</button>
+                <button class="cr-picker-item" on:click={() => browseTo(d.path)}><Folder size={13} />&nbsp;{d.name}</button>
               {/each}
               {#if browseState.directories.length === 0}
                 <div class="empty-note">Tidak ada subfolder.</div>
@@ -225,7 +232,7 @@
     <div class="cr-messages" bind:this={messagesEl}>
       {#each $chatSession.messages as m, i (i)}
         {#if m.role === 'tool'}
-          <div class="cr-note cr-note-tool">🔧 {m.name}</div>
+          <div class="cr-note cr-note-tool"><Wrench size={12} />&nbsp;{m.name}</div>
         {:else if m.role === 'system'}
           <div class="cr-note">{m.text}</div>
         {:else}
@@ -263,7 +270,7 @@
         {#each pending as p, i (i)}
           <div class="cr-attach">
             <img src={p.url} alt="preview lampiran" />
-            <button type="button" class="cr-attach-x" on:click={() => removePending(i)} aria-label="Hapus lampiran">✕</button>
+            <button type="button" class="cr-attach-x" on:click={() => removePending(i)} aria-label="Hapus lampiran"><X size={11} /></button>
           </div>
         {/each}
       </div>
@@ -289,7 +296,7 @@
         on:change={onFileChange}
         style="display:none" />
       <div class="cr-input-btns">
-        <button type="button" class="quick-btn" title="Lampirkan gambar" on:click={() => fileInput?.click()} disabled={$chatSession.busy}>📎</button>
+        <button type="button" class="quick-btn" title="Lampirkan gambar" on:click={() => fileInput?.click()} disabled={$chatSession.busy}><Paperclip size={13} /></button>
         {#if $chatSession.busy}
           <button type="button" class="quick-btn" on:click={interrupt}>Stop</button>
         {:else}
@@ -299,8 +306,11 @@
     </form>
 
     <div class="cr-actions">
-      {#if savedNote}<span class="small" style="color:var(--win-green)">Tersimpan ✓</span>{/if}
-      <button class="quick-btn" on:click={compile} disabled={$chatSession.busy}>📝 Susun change request</button>
+      {#if savedNote}<span class="small" style="color:var(--win-green)">Tersimpan</span>{/if}
+      {#if $chatSession.compiledDocument && !savedNote}
+        <span class="small muted">Dokumen change request siap disimpan</span>
+      {/if}
+      <button class="quick-btn" on:click={compile} disabled={$chatSession.busy}><NotebookPen size={13} />&nbsp;Susun change request</button>
       <button class="sign-btn" on:click={saveChangeRequest} disabled={saving || $chatSession.busy}>
         {saving ? 'Menyimpan…' : 'Simpan sebagai change request'}
       </button>
@@ -412,92 +422,10 @@
     color: var(--text-muted);
     font-style: italic;
   }
-  /* Markdown viewer di bubble assistant. Spacing dirapetin (bubble kecil). */
-  .cr-md :global(> *:first-child) {
-    margin-top: 0;
-  }
-  .cr-md :global(> *:last-child) {
-    margin-bottom: 0;
-  }
-  .cr-md :global(p) {
-    margin: 6px 0;
-  }
-  .cr-md :global(h1),
-  .cr-md :global(h2),
-  .cr-md :global(h3),
-  .cr-md :global(h4) {
-    margin: 10px 0 4px;
-    line-height: 1.3;
-    font-weight: bold;
-  }
-  .cr-md :global(h1) {
-    font-size: 15px;
-  }
-  .cr-md :global(h2) {
-    font-size: 13px;
-  }
-  .cr-md :global(h3),
-  .cr-md :global(h4) {
-    font-size: 12px;
-  }
-  .cr-md :global(ul),
-  .cr-md :global(ol) {
-    margin: 6px 0;
-    padding-left: 20px;
-  }
-  .cr-md :global(li) {
-    margin: 2px 0;
-  }
-  .cr-md :global(code) {
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
-    background: var(--content-bg);
-    border: 1px solid var(--content-alt);
-    padding: 0 3px;
-    border-radius: 3px;
-  }
-  .cr-md :global(pre) {
-    background: var(--content-bg);
-    border: 1px solid var(--content-alt);
-    border-radius: 4px;
-    padding: 8px;
-    overflow-x: auto;
-    margin: 6px 0;
-  }
-  .cr-md :global(pre code) {
-    border: none;
-    background: none;
-    padding: 0;
-  }
-  .cr-md :global(blockquote) {
-    margin: 6px 0;
-    padding-left: 8px;
-    border-left: 3px solid var(--content-alt);
-    color: var(--text-muted);
-  }
-  .cr-md :global(a) {
-    color: var(--win-blue);
-    text-decoration: underline;
-  }
-  .cr-md :global(table) {
-    border-collapse: collapse;
-    margin: 6px 0;
-    font-size: 11px;
-  }
-  .cr-md :global(th),
-  .cr-md :global(td) {
-    border: 1px solid var(--content-alt);
-    padding: 3px 6px;
-    text-align: left;
-  }
-  .cr-md :global(img) {
-    max-width: 100%;
-  }
-  .cr-md :global(hr) {
-    border: none;
-    border-top: 1px solid var(--content-alt);
-    margin: 8px 0;
-  }
+  /* .cr-md (markdown viewer) DIPINDAH ke app.css sebagai style global --
+     dipakai bareng di sini (bubble assistant) DAN routes/change-requests
+     (transcript + dokumen change_request.md), Svelte scoped style gak nembus
+     lintas komponen. Lihat app.css kalau mau ubah tampilan markdown-nya. */
   /* Baris info non-percakapan (tool call / status) — di tengah, samar. */
   .cr-note {
     align-self: center;

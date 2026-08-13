@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "dompurify": "^3.4.13",
+    "lucide-svelte": "^0.468.0",
     "marked": "^18.0.9"
   }
 }

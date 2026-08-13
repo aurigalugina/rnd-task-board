@@ -169,7 +169,7 @@ export type ChangeRequest = {
   submitted_by: string;
   submitted_by_name: string;
   raw_conversation: string;
-  structured_doc_path: string | null;
+  document_md: string | null;
   status: CRStatus;
   reviewed_by: string | null;
   reviewed_by_name: string | null;

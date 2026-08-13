@@ -8,8 +8,9 @@
   import StatCard from './StatCard.svelte';
   import Avatar from './Avatar.svelte';
   import DailyTaskPanel from './DailyTaskPanel.svelte';
-  import CommentSection from './CommentSection.svelte';
+  import CommentModal from './CommentModal.svelte';
   import CheatSheetSection from './CheatSheetSection.svelte';
+  import { Check, CirclePause, CirclePlay, X } from 'lucide-svelte';
 
   export let boardId: string;
 
@@ -21,8 +22,10 @@
   });
 
   let dailyTasksForComments: { id: string; title: string }[] = [];
-  let jumpScope: string | null = null;
-  let jumpToken = 0;
+  // Modal komentar — dibuka lewat tombol Komentar di DailyTaskPanel.
+  let commentModal: { open: boolean; jumpScope: string | null; jumpToken: number } = {
+    open: false, jumpScope: null, jumpToken: 0
+  };
 
   let bigTasks: BigTask[] = [];
   let loading = true;
@@ -158,6 +161,16 @@
       actionError = (e as Error).message;
     }
   }
+
+  async function toggleOnHold(bt: BigTask) {
+    actionError = '';
+    try {
+      await api.patch(`/big-tasks/${bt.id}/on-hold`, {});
+      await load({ silent: true });
+    } catch (e) {
+      actionError = (e as Error).message;
+    }
+  }
 </script>
 
 {#if loading}
@@ -193,7 +206,10 @@
         >
           <div class="bigtask-list-top">
             <span class="bigtask-list-name">{bt.name}</span>
-            <VerdictBadge verdict={bt.verdict} />
+            <div style="display:flex;gap:4px;align-items:center">
+              {#if bt.on_hold}<span class="badge badge-neutral">Di hold</span>{/if}
+              <VerdictBadge verdict={bt.verdict} />
+            </div>
           </div>
           <div class="dualbar-track" style="margin-top:4px">
             <div class="dualbar-fill fill-good" style="width:{bt.actual_pct}%" />
@@ -207,38 +223,7 @@
         </button>
       {/each}
 
-      {#if showCreateForm}
-        <form class="inline-form inline-form-daily" on:submit|preventDefault={createBigTask}>
-          <input class="inline-input" placeholder="Nama big task" bind:value={name} required />
-          <div class="inline-form-dates">
-            <input class="inline-input" type="date" bind:value={startDate} min={minDate} required />
-            <input class="inline-input" type="date" bind:value={deadline} min={minDate} required />
-          </div>
-          <div class="reviewer-picker">
-            <span class="small muted">Anggota — siapa saja yang terlibat (wajib min. 2)</span>
-            {#each assignableUsers as u (u.id)}
-              <label class="reviewer-picker-row small">
-                <input
-                  type="checkbox"
-                  checked={memberUserIds.includes(u.id)}
-                  on:change={() => toggleMember(u.id)}
-                />
-                {u.display_name} <span class="muted">— {u.roles.join('/')}</span>
-              </label>
-            {/each}
-          </div>
-          {#if memberUserIds.length < 2}<span class="small muted">Pilih minimal 2 anggota.</span>{/if}
-          {#if createError}<span class="small" style="color:var(--win-red)">{createError}</span>{/if}
-          <div class="inline-form-actions">
-            <button class="quick-btn quick-btn-done" type="submit" disabled={creating || memberUserIds.length < 2}>
-              {creating ? 'Menyimpan...' : 'Simpan'}
-            </button>
-            <button class="quick-btn" type="button" on:click={() => (showCreateForm = false)}>Batal</button>
-          </div>
-        </form>
-      {:else}
-        <button class="add-card-ghost" on:click={() => (showCreateForm = true)}>+ Tambah big task</button>
-      {/if}
+      <button class="add-card-ghost" on:click={() => (showCreateForm = true)}>+ Tambah big task</button>
     </div>
 
     <div class="bigtask-detail">
@@ -248,13 +233,24 @@
           <div class="bigtask-detail-title-right">
             <VerdictBadge verdict={activeBt.verdict} />
             {#if isSpv}
+              <button
+                class="hold-btn {activeBt.on_hold ? 'hold-btn-active' : ''}"
+                on:click={() => toggleOnHold(activeBt)}
+                title={activeBt.on_hold ? 'Lanjutkan task ini' : 'Tahan (on hold)'}
+              >
+                {#if activeBt.on_hold}
+                  <CirclePlay size={12} />&nbsp;Lanjutkan
+                {:else}
+                  <CirclePause size={12} />&nbsp;On hold
+                {/if}
+              </button>
               {#if activeBt.signed}
-                <button class="sign-btn sign-btn-active" on:click={() => undoSignOff(activeBt)}>✓ Signed done</button>
+                <button class="sign-btn sign-btn-active" on:click={() => undoSignOff(activeBt)}><Check size={12} />&nbsp;Signed done</button>
               {:else}
                 <button
                   class="sign-btn"
-                  disabled={activeBt.actual_pct < 100}
-                  title={activeBt.actual_pct < 100 ? 'Progress belum 100%' : ''}
+                  disabled={activeBt.actual_pct < 100 || activeBt.on_hold}
+                  title={activeBt.on_hold ? 'Task sedang di-hold' : activeBt.actual_pct < 100 ? 'Progress belum 100%' : ''}
                   on:click={() => signOff(activeBt)}
                 >
                   Tandai selesai (SPV)
@@ -306,13 +302,81 @@
             members={activeMembers}
             on:updated={() => load({ silent: true })}
             on:tasksLoaded={(e) => (dailyTasksForComments = e.detail)}
-            on:jumpToComment={(e) => { jumpScope = e.detail; jumpToken += 1; }}
+            on:jumpToComment={(e) => {
+              commentModal = { open: true, jumpScope: e.detail, jumpToken: commentModal.jumpToken + 1 };
+            }}
           />
-          <CommentSection bigTaskId={activeBt.id} dailyTasks={dailyTasksForComments} {jumpScope} {jumpToken} />
         {/key}
       {:else}
         <div class="empty-note">Pilih atau tambahkan big task dulu.</div>
       {/if}
     </div>
   </div>
+{/if}
+
+<!-- Modal tambah big task -->
+{#if showCreateForm}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="overlay overlay-center" on:click={() => (showCreateForm = false)}>
+    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <div class="modal-box bigtask-create-modal" role="dialog" on:click|stopPropagation>
+      <div class="de-modal-header">
+        <span class="de-modal-title">Tambah big task</span>
+        <button class="de-close-btn icon-btn" on:click={() => (showCreateForm = false)}><X size={12} /></button>
+      </div>
+      <div class="modal-body">
+        <form on:submit|preventDefault={createBigTask}>
+          <div class="panel-field">
+            <label class="small muted" for="bt-name">Nama big task</label>
+            <input id="bt-name" class="inline-input" placeholder="Nama big task" bind:value={name} required />
+          </div>
+          <div class="panel-field">
+            <span class="small muted">Rentang waktu</span>
+            <div class="inline-form-dates" style="padding:0">
+              <label class="small muted">
+                Mulai
+                <input class="inline-input" type="date" bind:value={startDate} min={minDate} required />
+              </label>
+              <label class="small muted">
+                Deadline
+                <input class="inline-input" type="date" bind:value={deadline} min={minDate} required />
+              </label>
+            </div>
+          </div>
+          <div class="panel-field">
+            <span class="small muted">Anggota — siapa saja yang terlibat (min. 2)</span>
+            <div class="reviewer-picker" style="margin-top:4px">
+              {#each assignableUsers as u (u.id)}
+                <label class="reviewer-picker-row small">
+                  <input type="checkbox" checked={memberUserIds.includes(u.id)} on:change={() => toggleMember(u.id)} />
+                  {u.display_name} <span class="muted">— {u.roles.join('/')}</span>
+                </label>
+              {/each}
+            </div>
+            {#if memberUserIds.length < 2}<span class="small muted">Pilih minimal 2 anggota.</span>{/if}
+          </div>
+          {#if createError}<p class="small" style="color:var(--win-red);margin:0">{createError}</p>{/if}
+          <div class="inline-form-actions" style="padding-top:4px">
+            <button class="quick-btn quick-btn-done" type="submit" disabled={creating || memberUserIds.length < 2}>
+              {creating ? 'Menyimpan...' : 'Simpan big task'}
+            </button>
+            <button class="quick-btn" type="button" on:click={() => (showCreateForm = false)}>Batal</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal komentar -->
+{#if commentModal.open && activeBt}
+  <CommentModal
+    bigTaskId={activeBt.id}
+    bigTaskName={activeBt.name}
+    dailyTasks={dailyTasksForComments}
+    jumpScope={commentModal.jumpScope}
+    jumpToken={commentModal.jumpToken}
+    on:close={() => (commentModal = { ...commentModal, open: false })}
+  />
 {/if}

@@ -3,9 +3,10 @@
   import { api } from '$lib/api/client';
   import { auth } from '$lib/stores/authStore';
   import { dateRangeInclusive } from '$lib/dateRange';
-  import type { AssignableUser, DailyTask } from '$lib/types';
+  import type { AssignableUser, DailyTask, DayEntry } from '$lib/types';
   import Avatar from './Avatar.svelte';
-  import DayProgressStatus from './DayProgressStatus.svelte';
+  import DayEntryEditModal from './DayEntryEditModal.svelte';
+  import { Plus, Trash2, MessageSquare } from 'lucide-svelte';
 
   export let bigTaskId: string;
   // Anggota Big Task (dari BigTaskList) — membatasi pilihan PIC daily task &
@@ -39,6 +40,8 @@
   let cloneEnd = '';
   let cloning = false;
   let cloneError: string | null = null;
+
+  let entryModal: { entry: DayEntry | null; dailyTaskId: string; prefillDate: string; isPast: boolean } | null = null;
 
   // Nama reviewer terpilih (buat preview judul "[Review <nama>] ...").
   $: minDate = $auth.user?.access_level === 'super_user' ? '' : new Date().toLocaleDateString('en-CA');
@@ -107,34 +110,6 @@
     }
   }
 
-  async function updateDayEntry(
-    dayEntryId: string,
-    patch: { planned_text?: string; progress_pct?: number; blocker_text?: string }
-  ) {
-    try {
-      // Menandai 100% (Selesai) mengosongkan blocker (perilaku mockup, 05-api-contract.md §5).
-      const body = patch.progress_pct === 100 ? { ...patch, blocker_text: '' } : patch;
-      await api.patch(`/day-entries/${dayEntryId}`, body);
-      await load({ silent: true });
-      dispatch('updated');
-    } catch (e) {
-      error = (e as Error).message;
-    }
-  }
-
-  // Tambah baris day entry baru di tanggal yang sama -- buat PIC yang mau
-  // breakdown lebih dari satu task di 1 hari (day_entries gak lagi dibatasi
-  // satu baris per tanggal, lihat decision-log-day-entry-add-delete-20260810.md).
-  async function addDayEntry(dailyTaskId: string, entryDate: string) {
-    try {
-      await api.post(`/daily-tasks/${dailyTaskId}/day-entries`, { entry_date: entryDate });
-      await load({ silent: true });
-      dispatch('updated');
-    } catch (e) {
-      error = (e as Error).message;
-    }
-  }
-
   // Hapus permanen -- dipakai a.l. buat baris weekend/"lembur" yang PIC-nya
   // gak mau kerjain. actual_pct otomatis menyesuaikan (dihitung dari SEMUA
   // baris yang tersisa saat dibaca).
@@ -155,11 +130,36 @@
   }
 
   // today di-compute sekali saat komponen mount (string YYYY-MM-DD lokal).
-  // Baris lampau (entry_date < today) di-lock: semua input, tombol hapus,
-  // dan tombol tambah per-tanggal di-disable — data historis tidak boleh diubah.
+  // Baris lampau (entry_date < today) di-lock: edit dari modal hanya-baca.
   const today = new Date().toLocaleDateString('en-CA'); // en-CA = YYYY-MM-DD
   function isPastDate(entryDate: string): boolean {
     return entryDate < today;
+  }
+
+  function openEditModal(day: DayEntry, dailyTaskId: string, past: boolean) {
+    entryModal = { entry: day, dailyTaskId, prefillDate: day.entry_date, isPast: past };
+  }
+
+  function openNewEntryModal(dailyTaskId: string, prefillDate: string) {
+    entryModal = { entry: null, dailyTaskId, prefillDate, isPast: false };
+  }
+
+  async function handleModalSaved() {
+    entryModal = null;
+    await load({ silent: true });
+    dispatch('updated');
+  }
+
+  async function handleModalDeleted() {
+    entryModal = null;
+    await load({ silent: true });
+    dispatch('updated');
+  }
+
+  function progressBadge(pct: number): { label: string; cls: string } {
+    if (pct === 100) return { label: 'Selesai', cls: 'badge-good' };
+    if (pct > 0) return { label: `${pct}%`, cls: 'badge-accent' };
+    return { label: 'Belum', cls: 'badge-neutral' };
   }
 
   function openCloneForm(dailyTaskId: string, dtTitle: string) {
@@ -220,15 +220,15 @@
             <span class="small">{pic.display_name}</span>
           {/if}
           <span class="mono small accent-text">{dt.actual_pct}%</span>
-          <button class="comment-jump-btn" on:click={() => dispatch('jumpToComment', dt.id)}>💬 Komentar</button>
-          <div class="review-clone-group">
-            <button class="review-clone-btn" on:click={() => openCloneForm(dt.id, dt.title)}>+ Review</button>
-          </div>
+          <button class="quick-btn" on:click={() => dispatch('jumpToComment', dt.id)}>
+            <MessageSquare size={12} />&nbsp;Komentar
+          </button>
+          <button class="quick-btn" on:click={() => openCloneForm(dt.id, dt.title)}>+ Review</button>
         </div>
       </div>
 
       {#if cloneForm?.dailyTaskId === dt.id}
-        <form class="inline-form" on:submit|preventDefault={submitClone} style="margin:0; border-top:1px solid #C3C8CC">
+        <form class="inline-form" on:submit|preventDefault={submitClone} style="margin:0; border-top:1px solid var(--np-border, #C3C8CC)">
           <span class="small muted">Reviewer:</span>
           <select class="inline-input" bind:value={cloneReviewerId} required style="width:180px">
             {#each members as m (m.id)}
@@ -243,59 +243,42 @@
           <button class="quick-btn" type="button" on:click={() => (cloneForm = null)}>Batal</button>
         </form>
       {/if}
+
       <table class="sheet-table daily-day-table">
         <thead>
           <tr>
             <th>Tanggal</th>
             <th>Rencana</th>
             <th>Status</th>
-            <th>Blocker / catatan lanjutan</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {#each dt.days as day (day.id)}
             {@const past = isPastDate(day.entry_date)}
-            <tr class="{isWeekendDate(day.entry_date) ? 'row-weekend' : ''}{past ? ' row-past' : ''}">
+            {@const pb = progressBadge(day.progress_pct)}
+            <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+            <tr class="de-row {isWeekendDate(day.entry_date) ? 'row-weekend' : ''} {past ? 'row-past' : ''}"
+              on:click={() => openEditModal(day, dt.id, past)}>
               <td class="mono small">
                 {day.entry_date}
                 {#if isWeekendDate(day.entry_date)}<span class="lembur-badge">lembur</span>{/if}
                 {#if past}<span class="past-badge">lampau</span>{/if}
               </td>
-              <td>
-                <input
-                  class="inline-input inline-input-cell"
-                  value={day.planned_text}
-                  placeholder="(belum diisi)"
-                  disabled={past}
-                  on:change={(e) => updateDayEntry(day.id, { planned_text: e.currentTarget.value })}
-                />
-              </td>
-              <td>
-                <DayProgressStatus progressPct={day.progress_pct} disabled={past} onChange={(next) => updateDayEntry(day.id, { progress_pct: next })} />
-              </td>
-              <td>
-                {#if day.progress_pct < 100}
-                  <input
-                    class="inline-input inline-input-cell"
-                    value={day.blocker_text}
-                    placeholder="Blocker / rencana lanjut..."
-                    disabled={past}
-                    on:change={(e) => updateDayEntry(day.id, { blocker_text: e.currentTarget.value })}
-                  />
-                {:else}
-                  <span class="muted small">—</span>
-                {/if}
-              </td>
-              <td class="day-row-actions">
+              <td class="de-planned-cell small">{day.planned_text || '—'}</td>
+              <td><span class="badge {pb.cls}">{pb.label}</span></td>
+              <!-- svelte-ignore a11y-click-events-have-key-events -->
+              <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+              <td class="day-row-actions" on:click|stopPropagation>
                 <button
                   class="icon-btn"
                   title={past ? 'Tanggal sudah lampau' : 'Tambah task lain di tanggal ' + day.entry_date}
                   aria-label="Tambah task lain di tanggal {day.entry_date}"
                   disabled={past}
-                  on:click={() => addDayEntry(dt.id, day.entry_date)}
+                  on:click={() => openNewEntryModal(dt.id, day.entry_date)}
                 >
-                  ➕
+                  <Plus size={13} />
                 </button>
                 <button
                   class="icon-btn icon-btn-danger"
@@ -304,7 +287,7 @@
                   disabled={past}
                   on:click={() => deleteDayEntry(day.id)}
                 >
-                  🗑
+                  <Trash2 size={13} />
                 </button>
               </td>
             </tr>
@@ -347,4 +330,17 @@
   {:else}
     <button class="add-card-ghost" on:click={() => (showCreateForm = true)}>+ Tambah daily task</button>
   {/if}
+{/if}
+
+{#if entryModal}
+  <DayEntryEditModal
+    dailyTaskId={entryModal.dailyTaskId}
+    entry={entryModal.entry}
+    prefillDate={entryModal.prefillDate}
+    minDate={entryModal.entry === null ? minDate : ''}
+    isPast={entryModal.isPast}
+    on:saved={handleModalSaved}
+    on:deleted={handleModalDeleted}
+    on:close={() => (entryModal = null)}
+  />
 {/if}

@@ -26,16 +26,16 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type ChangeRequest struct {
-	ID                string  `json:"id"`
-	SubmittedBy       string  `json:"submitted_by"`
-	SubmittedByName   string  `json:"submitted_by_name"`
-	RawConversation   string  `json:"raw_conversation"`
-	StructuredDocPath *string `json:"structured_doc_path"`
-	Status            string  `json:"status"`
-	ReviewedBy        *string `json:"reviewed_by"`
-	ReviewedByName    *string `json:"reviewed_by_name"`
-	ReviewedAt        *string `json:"reviewed_at"`
-	CreatedAt         string  `json:"created_at"`
+	ID              string  `json:"id"`
+	SubmittedBy     string  `json:"submitted_by"`
+	SubmittedByName string  `json:"submitted_by_name"`
+	RawConversation string  `json:"raw_conversation"`
+	DocumentMD      *string `json:"document_md"`
+	Status          string  `json:"status"`
+	ReviewedBy      *string `json:"reviewed_by"`
+	ReviewedByName  *string `json:"reviewed_by_name"`
+	ReviewedAt      *string `json:"reviewed_at"`
+	CreatedAt       string  `json:"created_at"`
 }
 
 // validStatuses mengikuti CHECK constraint di migration 0006.
@@ -62,7 +62,7 @@ func isValidStatusTransition(from, to string) bool {
 
 const selectCR = `
 	SELECT cr.id, cr.submitted_by, su.display_name, cr.raw_conversation,
-	       cr.structured_doc_path, cr.status, cr.reviewed_by, ru.display_name,
+	       cr.document_md, cr.status, cr.reviewed_by, ru.display_name,
 	       cr.reviewed_at, cr.created_at
 	FROM change_requests cr
 	JOIN users su ON su.id = cr.submitted_by
@@ -77,7 +77,7 @@ func scanCR(row interface {
 	var reviewedAt *time.Time
 	var createdAt time.Time
 	if err := row.Scan(&cr.ID, &cr.SubmittedBy, &cr.SubmittedByName, &cr.RawConversation,
-		&cr.StructuredDocPath, &cr.Status, &reviewedBy, &reviewedByName,
+		&cr.DocumentMD, &cr.Status, &reviewedBy, &reviewedByName,
 		&reviewedAt, &createdAt); err != nil {
 		return cr, err
 	}
@@ -116,8 +116,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type createRequest struct {
-	RawConversation   string  `json:"raw_conversation"`
-	StructuredDocPath *string `json:"structured_doc_path"`
+	RawConversation string  `json:"raw_conversation"`
+	DocumentMD      *string `json:"document_md"`
 }
 
 // Create mengimplementasikan POST /change-requests — semua user login boleh
@@ -136,9 +136,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	id := uuid.New().String()
 	_, err := h.db.Exec(r.Context(), `
-		INSERT INTO change_requests (id, submitted_by, raw_conversation, structured_doc_path, status)
+		INSERT INTO change_requests (id, submitted_by, raw_conversation, document_md, status)
 		VALUES ($1, $2, $3, $4, 'pending')
-	`, id, userID, req.RawConversation, req.StructuredDocPath)
+	`, id, userID, req.RawConversation, req.DocumentMD)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
