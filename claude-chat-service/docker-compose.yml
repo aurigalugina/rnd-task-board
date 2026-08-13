@@ -1,20 +1,31 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-go/master/schema/compose-spec.json
+#
+# Untuk deployment server: salin .env.example ke .env, isi CLAUDE_CODE_OAUTH_TOKEN
+# dan CHAT_DEFAULT_CWD, lalu jalankan: docker compose up -d --build
 services:
   claude-chat-service:
     build: .
     ports:
-      - "8090:8090"
+      - "${PORT:-8091}:${PORT:-8091}"
     environment:
-      PORT: "8090"
-      # Diisi otomatis lewat POST /auth/setup-token (lihat auth/tokenStore.ts) —
-      # biasanya TIDAK perlu di-set manual di sini.
-      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      PORT: "${PORT:-8091}"
+      # OAuth token Claude — WAJIB diisi di .env (lihat .env.example).
+      # Cara dapat token: jalankan `claude` CLI di host yang sudah login,
+      # lalu cek ~/.claude/.credentials.json atau gunakan POST /auth/setup-token
+      # saat pertama kali service hidup.
+      CLAUDE_CODE_OAUTH_TOKEN: "${CLAUDE_CODE_OAUTH_TOKEN:-}"
+      # Path direktori project di HOST (bukan di dalam container) yang
+      # otomatis dipakai tiap sesi change request — harus cocok dengan
+      # volume mount di bawah.
+      CHAT_DEFAULT_CWD: "${CHAT_DEFAULT_CWD:-/opt/rnd-task-board}"
     volumes:
       # Token store persist lintas restart container.
       - claude-chat-data:/app/data
-      # Direktori project yang mau bisa di-"pointing" dari client HARUS
-      # dimount ke sini juga — lihat README "Catatan Docker & filesystem".
-      # - /path/di/host/ke/project:/workspaces/project
+      # Mount direktori project dari host supaya claude-chat-service bisa
+      # baca file repo. Path host:container harus identik dengan
+      # CHAT_DEFAULT_CWD di atas (supaya path yang dikirim client valid
+      # di dalam container).
+      - "${CHAT_DEFAULT_CWD:-/opt/rnd-task-board}:${CHAT_DEFAULT_CWD:-/opt/rnd-task-board}:ro"
 
 volumes:
   claude-chat-data:

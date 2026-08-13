@@ -45,7 +45,7 @@ services:
       CLAUDE_CHAT_SERVICE_URL: http://host.docker.internal:8091
       # Direktori default yang di-point sesi chat (path di HOST tempat
       # claude-chat-service jalan) — user tetap bisa ganti via dir picker.
-      CHAT_DEFAULT_CWD: /home/lugidev/rnd-task-board
+      CHAT_DEFAULT_CWD: ${CHAT_DEFAULT_CWD:-/home/lugidev/rnd-task-board}
     volumes:
       - ./backend:/app
       - go_mod_cache:/go/pkg/mod
