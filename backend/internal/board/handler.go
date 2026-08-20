@@ -1,12 +1,14 @@
 package board
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"rndops/backend/internal/auth"
@@ -21,9 +23,30 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type Board struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Category    *string  `json:"category"`
+	TeamIDs     []string `json:"team_ids"`
+}
+
+var validCategories = map[string]bool{"project": true, "routine": true}
+
+const boardSelectColumns = `
+	b.id, b.name, b.description, b.category,
+	COALESCE(bt.team_ids, ARRAY[]::text[]) AS team_ids
+`
+const boardTeamsJoin = `
+	LEFT JOIN (
+		SELECT board_id, array_agg(team_id::text ORDER BY team_id) AS team_ids
+		FROM board_teams GROUP BY board_id
+	) bt ON bt.board_id = b.id
+`
+
+func scanBoard(row interface{ Scan(dest ...any) error }) (Board, error) {
+	var b Board
+	err := row.Scan(&b.ID, &b.Name, &b.Description, &b.Category, &b.TeamIDs)
+	return b, err
 }
 
 // List mengimplementasikan GET /boards (05-api-contract.md §3). Board yang
@@ -32,8 +55,61 @@ type Board struct {
 // archived otomatis hilang dari keduanya sekaligus. Lihat ListArchived buat
 // board yang sudah diarsipkan (super_user only). Decision log:
 // decision-log-board-archive-20260812.md.
+//
+// Filter tim & kategori (2026-08-20, decision-log-boards-dashboard-enhancements):
+// query ?category=project|routine (opsional, semua role). Regular user
+// OTOMATIS dibatasi ke board yang board_teams-nya mengandung org_team dia
+// (gak ada picker -- implisit); board TANPA tim ter-assign gak kelihatan sama
+// sekali sampai super_user assign. super_user boleh ?team_id=<uuid> buat
+// mempersempit ke 1 tim, atau kosongkan buat lihat semua tim. Level proteksi
+// = filter query, BUKAN lockdown endpoint turunan (mis. /big-tasks) -- MVP
+// trust-based, lihat decision log.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(), `SELECT id, name, description FROM boards WHERE archived_at IS NULL ORDER BY created_at`)
+	var category *string
+	if c := r.URL.Query().Get("category"); c != "" {
+		if !validCategories[c] {
+			http.Error(w, "category harus salah satu dari: project, routine", http.StatusBadRequest)
+			return
+		}
+		category = &c
+	}
+
+	var rows pgx.Rows
+	var err error
+
+	if auth.IsSuperUser(r.Context()) {
+		var teamID *string
+		if t := r.URL.Query().Get("team_id"); t != "" {
+			teamID = &t
+		}
+		rows, err = h.db.Query(r.Context(), `
+			SELECT `+boardSelectColumns+`
+			FROM boards b
+			`+boardTeamsJoin+`
+			WHERE b.archived_at IS NULL
+			  AND ($1::text IS NULL OR b.category = $1)
+			  AND ($2::uuid IS NULL OR EXISTS (
+			      SELECT 1 FROM board_teams x WHERE x.board_id = b.id AND x.team_id = $2
+			  ))
+			ORDER BY b.created_at
+		`, category, teamID)
+	} else {
+		userID := auth.UserIDFromContext(r.Context())
+		rows, err = h.db.Query(r.Context(), `
+			SELECT `+boardSelectColumns+`
+			FROM boards b
+			`+boardTeamsJoin+`
+			WHERE b.archived_at IS NULL
+			  AND ($1::text IS NULL OR b.category = $1)
+			  AND EXISTS (
+			      SELECT 1 FROM board_teams x
+			      JOIN referensi_tim rt ON rt.id = x.team_id
+			      JOIN users u ON u.org_team = rt.name
+			      WHERE x.board_id = b.id AND u.id = $2
+			  )
+			ORDER BY b.created_at
+		`, category, userID)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -42,8 +118,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	result := []Board{}
 	for rows.Next() {
-		var b Board
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description); err != nil {
+		b, err := scanBoard(rows)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -55,12 +131,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type createBoardRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Category    *string `json:"category"`
 }
 
 // Create mengimplementasikan POST /boards. Field 'tag' lama diganti 'description'
-// -- lihat decision-log-bigtask-members-refactor-20260811.md.
+// -- lihat decision-log-bigtask-members-refactor-20260811.md. `category`
+// opsional, boleh dipilih user biasa (bukan super_user-only -- beda dari
+// edit). Board baru OTOMATIS ke-assign ke org_team pembuatnya di board_teams,
+// biar gak invisible dari filter tim sampai super_user assign manual. Lihat
+// decision-log-boards-dashboard-enhancements-20260820.md.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createBoardRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -71,17 +152,140 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name wajib diisi", http.StatusBadRequest)
 		return
 	}
+	if req.Category != nil && !validCategories[*req.Category] {
+		http.Error(w, "category harus salah satu dari: project, routine", http.StatusBadRequest)
+		return
+	}
 
 	id := uuid.New().String()
-	_, err := h.db.Exec(r.Context(), `INSERT INTO boards (id, name, description) VALUES ($1, $2, $3)`, id, req.Name, req.Description)
+	userID := auth.UserIDFromContext(r.Context())
+
+	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback(r.Context())
 
+	if _, err := tx.Exec(r.Context(), `
+		INSERT INTO boards (id, name, description, category) VALUES ($1, $2, $3, $4)
+	`, id, req.Name, req.Description, req.Category); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Auto-assign ke tim pembuatnya (kalau org_team dia match referensi_tim --
+	// harusnya selalu match, org_team divalidasi terhadap referensi_tim saat
+	// user dibuat, tapi jangan gagal keras kalau ternyata tidak ada).
+	if _, err := tx.Exec(r.Context(), `
+		INSERT INTO board_teams (board_id, team_id)
+		SELECT $1, rt.id FROM referensi_tim rt
+		JOIN users u ON u.org_team = rt.name
+		WHERE u.id = $2
+		ON CONFLICT DO NOTHING
+	`, id, userID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	b, err := h.loadOne(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(Board{ID: id, Name: req.Name, Description: req.Description})
+	json.NewEncoder(w).Encode(b)
+}
+
+func (h *Handler) loadOne(ctx context.Context, id string) (Board, error) {
+	row := h.db.QueryRow(ctx, `
+		SELECT `+boardSelectColumns+`
+		FROM boards b
+		`+boardTeamsJoin+`
+		WHERE b.id = $1
+	`, id)
+	return scanBoard(row)
+}
+
+type updateBoardRequest struct {
+	Description *string   `json:"description"`
+	Category    *string   `json:"category"`
+	TeamIDs     *[]string `json:"team_ids"`
+}
+
+// Update mengimplementasikan PATCH /boards/{boardID} -- super_user only
+// (in-handler check, pola sama archive/dst). Bisa ubah deskripsi, kategori,
+// dan/atau REPLACE seluruh assignment tim (kalau team_ids dikirim -- nil
+// berarti gak diubah, array kosong berarti dilepas dari semua tim). Lihat
+// decision-log-boards-dashboard-enhancements-20260820.md.
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	if !auth.IsSuperUser(r.Context()) {
+		http.Error(w, "cuma super_user yang bisa edit board", http.StatusForbidden)
+		return
+	}
+	boardID := chi.URLParam(r, "boardID")
+
+	var req updateBoardRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Category != nil && !validCategories[*req.Category] {
+		http.Error(w, "category harus salah satu dari: project, routine", http.StatusBadRequest)
+		return
+	}
+
+	tx, err := h.db.Begin(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	if _, err := tx.Exec(r.Context(), `
+		UPDATE boards SET
+			description = COALESCE($2, description),
+			category = COALESCE($3, category),
+			updated_at = now()
+		WHERE id = $1
+	`, boardID, req.Description, req.Category); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if req.TeamIDs != nil {
+		if _, err := tx.Exec(r.Context(), `DELETE FROM board_teams WHERE board_id = $1`, boardID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for _, teamID := range *req.TeamIDs {
+			if _, err := tx.Exec(r.Context(), `
+				INSERT INTO board_teams (board_id, team_id) VALUES ($1, $2)
+			`, boardID, teamID); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	b, err := h.loadOne(r.Context(), boardID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(b)
 }
 
 // Summary mengimplementasikan GET /boards/{board_id}/summary — matriks dashboard

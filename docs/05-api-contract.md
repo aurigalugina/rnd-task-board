@@ -45,11 +45,19 @@ Menggunakan cookie refresh token. Response 200: `{ "access_token": "string" }`
 ## 3. Boards
 
 ### `GET /boards`
-Response 200: `[{ "id", "name", "description" }]`. Board yang sudah di-archive TIDAK ikut muncul (`WHERE archived_at IS NULL`) — lihat §3.1.
+Query param opsional: `?category=project|routine`, `?team_id=uuid` (**`team_id` cuma dihormati kalau caller `access_level=super_user`** — regular user diabaikan filternya karena sudah dibatasi otomatis, lihat catatan visibility di bawah).
+Response 200: `[{ "id", "name", "description", "category": "project"|"routine"|null, "team_ids": ["uuid"] }]`. Board yang sudah di-archive TIDAK ikut muncul (`WHERE archived_at IS NULL`) — lihat §3.1.
+**Visibility (2026-08-20):** regular user (`access_level=regular_user`) HANYA melihat board yang di-assign ke tim (`org_team`) dia sendiri via `board_teams` (join `referensi_tim.name = users.org_team`) — board bisa lintas tim, tapi user cuma lihat board yang timnya termasuk. `access_level=super_user` tidak dibatasi ini, boleh pakai `?team_id=` buat lihat tim manapun. Lihat `docs/decision-log/decision-log-boards-dashboard-enhancements-20260820.md`.
 
 ### `POST /boards`
-Request: `{ "name": "string", "description": "string" }`
+Request: `{ "name": "string", "description": "string", "category": "project"|"routine"|null }` (`category` opsional, boleh diisi user manapun saat create).
+Server otomatis nambah baris `board_teams` untuk `org_team` milik pembuat board (board "kepunyaan" tim pembuatnya secara default).
 Response 201: Board object.
+
+### `PATCH /boards/{board_id}` (super_user only, baru 2026-08-20)
+Request (parsial): `{ "description": "string", "category": "project"|"routine"|null, "team_ids": ["uuid"] }` — kirim `team_ids` untuk REPLACE penuh set tim board itu (bukan append). Nama board TIDAK bisa diedit lewat endpoint ini.
+Otorisasi: `access_level=super_user` (cek in-handler, bukan `RequireRole`) — 403 kalau bukan.
+Response 200: Board object terbaru.
 
 ### `GET /boards/{board_id}/summary`
 Response 200 — matriks dashboard per board:
@@ -118,11 +126,19 @@ Response 201: `{ "id": "uuid" }`.
 
 ### `POST /big-tasks/{big_task_id}/sign-off`
 Otorisasi: role `spv`. Ditolak (409) apabila `actual_pct` < 100.
+Request (opsional, baru 2026-08-20): `{ "signed_at": "YYYY-MM-DD" }` — kalau diisi (backdate manual), CUMA boleh kalau caller juga `access_level=super_user` (403 kalau non-super_user isi field ini). Divalidasi 400 kalau: tanggal di masa depan, sebelum `start_date` Big Task, atau sebelum tanggal `day_entries` terakhir Big Task itu. Kalau `signed_at` diisi, `big_task_signoffs.signed_at_backdated_by` diisi user_id super_user itu (audit trail, dipakai frontend buat indikator "(backdated)").
 Response 200: Big Task object dengan `signed: true`.
 
 ### `DELETE /big-tasks/{big_task_id}/sign-off`
 Otorisasi: role `spv`. Undo sign-off.
 Response 204.
+
+### `PATCH /big-tasks/{big_task_id}` (super_user only, baru 2026-08-20)
+Request (parsial): `{ "name": "string", "start_date": "YYYY-MM-DD", "deadline": "YYYY-MM-DD" }`.
+Otorisasi: `access_level=super_user` (cek in-handler) — 403 kalau bukan. Set `big_tasks.updated_by`.
+Response 200: Big Task object terbaru. Lihat `docs/decision-log/decision-log-verdict-backfill-signoff-20260820.md` — dipakai bareng backdate sign-off (mis. geser deadline dulu sebelum sign-off retroaktif).
+
+**Catatan verdict (2026-08-20):** `verdict` untuk Big Task yang sudah `signed` dihitung dari `deadline` vs `signed_at` (BEKU sejak titik sign-off) — BUKAN dari `deadline` vs waktu request berjalan. Big Task yang di-sign-off tepat waktu tetap `"win"` selamanya walau dibaca ulang lama setelah deadline lewat.
 
 ## 5. Daily Tasks & Day Entries
 
@@ -212,6 +228,15 @@ Response 200: `[{ "id", "board_id", "type", "title", "value", "author_id", "crea
 Request: `{ "type": "file"|"url"|"note", "title": "string", "value": "string" }`
 Untuk `type: "file"`, `value` berisi referensi berkas hasil unggah (lihat §10 Upload).
 Response 201: Cheat Sheet item.
+
+### `PATCH /boards/{board_id}/cheat-sheet/{item_id}` (super_user only, baru 2026-08-20)
+Request (parsial): `{ "type", "title", "value" }` — semua field termasuk `type` bisa diganti (mis. note → file).
+Otorisasi: `access_level=super_user` (cek in-handler) — 403 kalau bukan.
+Response 200: Cheat Sheet item terbaru.
+
+### `DELETE /boards/{board_id}/cheat-sheet/{item_id}` (super_user only, baru 2026-08-20)
+Otorisasi: `access_level=super_user` — 403 kalau bukan.
+Response 204.
 
 ## 8. Weekly Plan
 

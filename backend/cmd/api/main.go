@@ -130,6 +130,9 @@ func main() {
 			protected.Get("/boards", boardHandler.List)
 			protected.Post("/boards", boardHandler.Create)
 			protected.Get("/boards/{boardID}/summary", boardHandler.Summary)
+			// Edit deskripsi/kategori/tim board -- super_user only, cek in-handler.
+			// Lihat decision-log-boards-dashboard-enhancements-20260820.md.
+			protected.Patch("/boards/{boardID}", boardHandler.Update)
 			// Board Archive (super_user only) -- cek in-handler (bukan RequireRole,
 			// pola sama seperti weekly-plan/team-status di bawah), lihat
 			// decision-log-board-archive-20260812.md.
@@ -140,6 +143,10 @@ func main() {
 			protected.Get("/boards/{boardID}/big-tasks", bigTaskHandler.ListByBoard)
 			protected.Post("/boards/{boardID}/big-tasks", bigTaskHandler.Create)
 			protected.Put("/big-tasks/{bigTaskID}/members", bigTaskHandler.SetMembers)
+			// Edit judul/tanggal Big Task -- super_user only, cek in-handler (access_level
+			// beda axis dari roles, pola sama seperti board archive/weekly-plan team-status).
+			// Lihat decision-log-verdict-backfill-signoff-20260820.md.
+			protected.Patch("/big-tasks/{bigTaskID}", bigTaskHandler.Update)
 
 			protected.Group(func(spvOnly chi.Router) {
 				spvOnly.Use(auth.RequireRole("spv"))
@@ -167,6 +174,8 @@ func main() {
 
 			protected.Get("/boards/{boardID}/cheat-sheet", cheatSheetHandler.List)
 			protected.Post("/boards/{boardID}/cheat-sheet", cheatSheetHandler.Create)
+			protected.Patch("/boards/{boardID}/cheat-sheet/{itemID}", cheatSheetHandler.Update)
+			protected.Delete("/boards/{boardID}/cheat-sheet/{itemID}", cheatSheetHandler.Delete)
 
 			protected.Post("/uploads", uploadHandler.Create)
 			protected.Get("/uploads/{filename}", uploadHandler.Serve)
@@ -202,13 +211,18 @@ func main() {
 			protected.Get("/users/assignable", userHandler.ListAssignable)
 			protected.Get("/users/progress-summary", userHandler.ProgressSummary)
 			protected.Get("/roles", userHandler.ListRoles)
+			// GET /referensi-tim dibuka ke SEMUA user login (bukan admin/spv only) --
+			// cuma { id, name }, gak sensitif, dan dipakai Dashboard buat filter tim
+			// (super_user belum tentu punya role admin/spv). Mutasi (Create/Update/
+			// Delete) TETAP admin/spv only di grup adminOnly. Lihat
+			// decision-log-boards-dashboard-enhancements-20260820.md.
+			protected.Get("/referensi-tim", referensiHandler.ListTim)
 
 			protected.Group(func(adminOnly chi.Router) {
 				adminOnly.Use(auth.RequireRole("admin", "spv"))
 				adminOnly.Get("/users", userHandler.List)
 				adminOnly.Post("/users", userHandler.Create)
 				adminOnly.Patch("/users/{userID}", userHandler.Update)
-				adminOnly.Get("/referensi-tim", referensiHandler.ListTim)
 				adminOnly.Post("/referensi-tim", referensiHandler.CreateTim)
 				adminOnly.Patch("/referensi-tim/{id}", referensiHandler.UpdateTim)
 				adminOnly.Delete("/referensi-tim/{id}", referensiHandler.DeleteTim)

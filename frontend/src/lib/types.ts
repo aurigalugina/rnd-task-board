@@ -2,10 +2,17 @@
 // expected_pct, verdict, completion_rate, is_weekend) selalu dari server,
 // jangan pernah dihitung ulang di frontend.
 
+export type BoardCategory = 'project' | 'routine';
+
 export type Board = {
   id: string;
   name: string;
   description: string;
+  // Nullable -- board lama "belum dikategorikan" sampai di-edit super_user.
+  // team_ids: assignment many-to-many ke referensi_tim, lihat
+  // decision-log-boards-dashboard-enhancements-20260820.md.
+  category: BoardCategory | null;
+  team_ids: string[];
 };
 
 // GET /boards/archive (super_user only) — lihat decision-log-board-archive-20260812.md.
@@ -47,6 +54,10 @@ export type BigTask = {
   signed: boolean;
   signed_by: string | null;
   signed_at: string | null;
+  // Terisi (super_user id) kalau signed_at di-backdate manual, bukan sign-off
+  // real-time -- lihat decision-log-verdict-backfill-signoff-20260820.md.
+  signed_at_backdated_by: string | null;
+  updated_by: string | null;
   member_user_ids: string[];
 };
 

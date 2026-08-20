@@ -105,3 +105,77 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(it)
 }
+
+type updateItemRequest struct {
+	Type  string `json:"type"`
+	Title string `json:"title"`
+	Value string `json:"value"`
+}
+
+// Update mengimplementasikan PATCH /boards/{board_id}/cheat-sheet/{item_id} --
+// super_user only (in-handler check). Boleh ubah semua field termasuk `type`
+// (file/url/note bisa saling diganti) -- dikonfirmasi user, lihat
+// decision-log-boards-dashboard-enhancements-20260820.md. Kalau item type
+// "file" diganti/dihapus, file fisik di UPLOAD_DIR TIDAK ikut dihapus (modul
+// upload gak punya delete-file) -- orphan file diterima sebagai limitasi.
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	if !auth.IsSuperUser(r.Context()) {
+		http.Error(w, "cuma super_user yang bisa edit referensi board", http.StatusForbidden)
+		return
+	}
+	itemID := chi.URLParam(r, "itemID")
+
+	var req updateItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if !validTypes[req.Type] {
+		http.Error(w, "type harus salah satu dari: file, url, note", http.StatusBadRequest)
+		return
+	}
+
+	tag, err := h.db.Exec(r.Context(), `
+		UPDATE cheat_sheet_items SET type = $2, title = $3, value = $4 WHERE id = $1
+	`, itemID, req.Type, req.Title, req.Value)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		http.Error(w, "referensi tidak ditemukan", http.StatusNotFound)
+		return
+	}
+
+	var it Item
+	err = h.db.QueryRow(r.Context(), `
+		SELECT id, board_id, type, title, value, author_id, created_at FROM cheat_sheet_items WHERE id = $1
+	`, itemID).Scan(&it.ID, &it.BoardID, &it.Type, &it.Title, &it.Value, &it.AuthorID, &it.CreatedAt)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(it)
+}
+
+// Delete mengimplementasikan DELETE /boards/{board_id}/cheat-sheet/{item_id} --
+// super_user only.
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	if !auth.IsSuperUser(r.Context()) {
+		http.Error(w, "cuma super_user yang bisa hapus referensi board", http.StatusForbidden)
+		return
+	}
+	itemID := chi.URLParam(r, "itemID")
+
+	tag, err := h.db.Exec(r.Context(), `DELETE FROM cheat_sheet_items WHERE id = $1`, itemID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		http.Error(w, "referensi tidak ditemukan", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

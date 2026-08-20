@@ -5,31 +5,47 @@ import (
 	"time"
 )
 
+func timePtr(t time.Time) *time.Time { return &t }
+
 func TestComputeVerdict(t *testing.T) {
 	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	deadline := now.AddDate(0, 0, 5)
 
 	cases := []struct {
 		name        string
 		deadline    time.Time
-		signed      bool
+		signedAt    *time.Time
+		now         time.Time
 		wantVerdict string
 	}{
 		// BRD RULE-04: on_progress netral berapa pun gap-nya selama belum lewat deadline.
-		{"unsigned, deadline in future", now.AddDate(0, 0, 5), false, "on_progress"},
-		{"unsigned, deadline today", now, false, "on_progress"},
+		{"unsigned, deadline in future", now.AddDate(0, 0, 5), nil, now, "on_progress"},
+		{"unsigned, deadline today", now, nil, now, "on_progress"},
 		// BRD RULE-06: lose otomatis kalau deadline lewat tanpa sign-off.
-		{"unsigned, deadline passed", now.AddDate(0, 0, -1), false, "lose"},
+		{"unsigned, deadline passed", now.AddDate(0, 0, -1), nil, now, "lose"},
 		// BRD RULE-05: win hanya sah kalau sign-off terjadi sebelum/tepat deadline.
-		{"signed, deadline in future", now.AddDate(0, 0, 5), true, "win"},
-		{"signed, deadline today", now, true, "win"},
-		{"signed, deadline already passed", now.AddDate(0, 0, -1), true, "lose"},
+		{"signed sebelum deadline", deadline, timePtr(deadline.AddDate(0, 0, -1)), now, "win"},
+		{"signed tepat deadline", deadline, timePtr(deadline), now, "win"},
+		{"signed setelah deadline (telat)", deadline, timePtr(deadline.AddDate(0, 0, 1)), now, "lose"},
+		// Regression decision-log-verdict-backfill-signoff-20260820.md: sign-off
+		// SAH on-time di masa lalu HARUS TETAP "win" walau dibaca lama setelah
+		// deadline lewat (now jauh di depan) -- computeVerdict dulu pakai `now`
+		// (bukan `signedAt`) buat evaluasi win/lose, jadi verdict "berubah" jadi
+		// lose seiring waktu berjalan walau keputusan menangnya udah final.
+		{
+			"signed on-time di masa lalu, dibaca lama setelah deadline lewat",
+			time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+			timePtr(time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC)),
+			time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC),
+			"win",
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			verdict, _ := computeVerdict(c.deadline, c.signed, now)
+			verdict, _ := computeVerdict(c.deadline, c.signedAt, c.now)
 			if verdict != c.wantVerdict {
-				t.Errorf("computeVerdict(%v, %v, now) = %q, want %q", c.deadline, c.signed, verdict, c.wantVerdict)
+				t.Errorf("computeVerdict(%v, %v, %v) = %q, want %q", c.deadline, c.signedAt, c.now, verdict, c.wantVerdict)
 			}
 		})
 	}
@@ -74,7 +90,7 @@ func TestComputeVerdictDaysLeft(t *testing.T) {
 	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 	deadline := now.AddDate(0, 0, 3)
 
-	_, daysLeft := computeVerdict(deadline, false, now)
+	_, daysLeft := computeVerdict(deadline, nil, now)
 	if daysLeft != 3 {
 		t.Errorf("daysLeft = %d, want 3", daysLeft)
 	}

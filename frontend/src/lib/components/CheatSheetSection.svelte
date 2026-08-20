@@ -1,9 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api, downloadBlob } from '$lib/api/client';
+  import { auth } from '$lib/stores/authStore';
   import type { AssignableUser, CheatSheetItem } from '$lib/types';
   import Avatar from './Avatar.svelte';
-  import { FileText, Link2, NotebookPen, Download } from 'lucide-svelte';
+  import { FileText, Link2, NotebookPen, Download, Pencil, Trash2 } from 'lucide-svelte';
+
+  // Edit & delete cheat sheet item -- super_user only, lihat
+  // decision-log-boards-dashboard-enhancements-20260820.md.
+  $: isSuperUser = $auth.user?.access_level === 'super_user';
 
   export let boardId: string;
 
@@ -42,6 +47,9 @@
   let file: File | null = null;
   let saving = false;
   let saveError: string | null = null;
+  // Non-null = form lagi dipakai buat EDIT item ini (bukan tambah baru) --
+  // reuse form yang sama, submit-nya beda (PATCH vs POST).
+  let editingId: string | null = null;
 
   function reset() {
     title = '';
@@ -49,6 +57,17 @@
     file = null;
     type = 'note';
     showAdd = false;
+    editingId = null;
+  }
+
+  function startEdit(it: CheatSheetItem) {
+    editingId = it.id;
+    type = it.type;
+    title = it.title;
+    value = it.type === 'file' ? '' : it.value; // file: kosongin, isi lama tetap kepakai kalau gak diganti
+    file = null;
+    saveError = null;
+    showAdd = true;
   }
 
   async function save() {
@@ -60,29 +79,45 @@
     saving = true;
     try {
       let finalValue = value.trim();
-      if (type === 'file') {
-        if (!file) {
-          saveError = 'Pilih file dulu.';
-          saving = false;
-          return;
-        }
+      if (type === 'file' && file) {
         const formData = new FormData();
         formData.append('file', file);
         const res = await api.upload<{ value: string }>('/uploads', formData);
         finalValue = res.value;
+      } else if (type === 'file' && !file && editingId) {
+        // Edit file tanpa ganti file baru -- pertahankan value (nama file) lama.
+        finalValue = items.find((i) => i.id === editingId)?.value ?? '';
+      } else if (type === 'file' && !file) {
+        saveError = 'Pilih file dulu.';
+        saving = false;
+        return;
       }
       if (!finalValue) {
         saveError = 'Isi referensi wajib diisi.';
         saving = false;
         return;
       }
-      await api.post(`/boards/${boardId}/cheat-sheet`, { type, title: title.trim(), value: finalValue });
+      if (editingId) {
+        await api.patch(`/boards/${boardId}/cheat-sheet/${editingId}`, { type, title: title.trim(), value: finalValue });
+      } else {
+        await api.post(`/boards/${boardId}/cheat-sheet`, { type, title: title.trim(), value: finalValue });
+      }
       reset();
       await load({ silent: true });
     } catch (e) {
       saveError = (e as Error).message;
     } finally {
       saving = false;
+    }
+  }
+
+  async function deleteItem(it: CheatSheetItem) {
+    if (!confirm(`Hapus referensi "${it.title}"?`)) return;
+    try {
+      await api.del(`/boards/${boardId}/cheat-sheet/${it.id}`);
+      await load({ silent: true });
+    } catch (e) {
+      error = (e as Error).message;
     }
   }
 
@@ -137,6 +172,10 @@
               <span class="small">{author.display_name}</span>
             {/if}
             <span class="mono small muted">{it.created_at.slice(0, 10)}</span>
+            {#if isSuperUser}
+              <button class="icon-btn" title="Edit" on:click={() => startEdit(it)}><Pencil size={11} /></button>
+              <button class="icon-btn icon-btn-danger" title="Hapus" on:click={() => deleteItem(it)}><Trash2 size={11} /></button>
+            {/if}
           </div>
         </div>
       {/each}
@@ -147,6 +186,7 @@
 
     {#if showAdd}
       <div class="inline-form inline-form-daily">
+        {#if editingId}<span class="small muted">Edit referensi</span>{/if}
         <div class="role-filter-pills">
           <button class="role-filter-pill {type === 'note' ? 'role-filter-pill-active' : ''}" on:click={() => (type = 'note')}>
             <NotebookPen size={12} />&nbsp;Catatan
@@ -169,11 +209,12 @@
             type="file"
             on:change={(e) => (file = e.currentTarget.files?.[0] ?? null)}
           />
+          {#if editingId}<span class="small muted">Kosongkan buat pertahankan file lama.</span>{/if}
         {/if}
         {#if saveError}<span class="small" style="color:var(--win-red)">{saveError}</span>{/if}
         <div class="inline-form-actions">
           <button class="quick-btn quick-btn-done" on:click={save} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Simpan'}
+            {saving ? 'Menyimpan...' : editingId ? 'Simpan perubahan' : 'Simpan'}
           </button>
           <button class="quick-btn" on:click={reset}>Batal</button>
         </div>

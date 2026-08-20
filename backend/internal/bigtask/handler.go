@@ -22,21 +22,23 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type BigTask struct {
-	ID               string     `json:"id"`
-	BoardID          string     `json:"board_id"`
-	Name             string     `json:"name"`
-	StartDate        string     `json:"start_date"`
-	Deadline         string     `json:"deadline"`
-	DefaultPicUserID *string    `json:"default_pic_user_id"`
-	OnHold           bool       `json:"on_hold"`
-	ActualPct        int        `json:"actual_pct"`
-	ExpectedPct      int        `json:"expected_pct"`
-	DaysLeft         int        `json:"days_left"`
-	Verdict          string     `json:"verdict"`
-	Signed           bool       `json:"signed"`
-	SignedBy         *string    `json:"signed_by"`
-	SignedAt         *time.Time `json:"signed_at"`
-	MemberUserIDs    []string   `json:"member_user_ids"`
+	ID                  string     `json:"id"`
+	BoardID             string     `json:"board_id"`
+	Name                string     `json:"name"`
+	StartDate           string     `json:"start_date"`
+	Deadline            string     `json:"deadline"`
+	DefaultPicUserID    *string    `json:"default_pic_user_id"`
+	OnHold              bool       `json:"on_hold"`
+	ActualPct           int        `json:"actual_pct"`
+	ExpectedPct         int        `json:"expected_pct"`
+	DaysLeft            int        `json:"days_left"`
+	Verdict             string     `json:"verdict"`
+	Signed              bool       `json:"signed"`
+	SignedBy            *string    `json:"signed_by"`
+	SignedAt            *time.Time `json:"signed_at"`
+	SignedAtBackdatedBy *string    `json:"signed_at_backdated_by"`
+	UpdatedBy           *string    `json:"updated_by"`
+	MemberUserIDs       []string   `json:"member_user_ids"`
 }
 
 // computeExpectedPct menerapkan SRS FR-BRD-03: expected_pct = proporsi waktu
@@ -61,14 +63,21 @@ func computeExpectedPct(startDate, deadline, now time.Time) int {
 // netral selama tenggat waktu belum terlampaui, terlepas dari besar-kecilnya
 // gap antara realisasi dan ekspektasi. Win/Lose hanya ditentukan pada titik
 // keputusan (sign-off, atau tenggat terlampaui tanpa sign-off).
-func computeVerdict(deadline time.Time, signed bool, now time.Time) (verdict string, daysLeft int) {
-	daysLeft = int(deadline.Sub(now).Hours() / 24)
-	if signed {
+//
+// signedAt (bukan cuma bool) SENGAJA dipakai buat evaluasi win/lose -- kalau
+// dibandingkan ke `now` (waktu baca/request), Big Task yang sign-off-nya SAH
+// on-time bakal "berubah" jadi lose begitu kalender lewat deadline & dashboard
+// dibuka lagi, padahal keputusan menang itu sudah final di masa lalu. Lihat
+// decision-log-verdict-backfill-signoff-20260820.md.
+func computeVerdict(deadline time.Time, signedAt *time.Time, now time.Time) (verdict string, daysLeft int) {
+	if signedAt != nil {
+		daysLeft = int(deadline.Sub(*signedAt).Hours() / 24)
 		if daysLeft >= 0 {
 			return "win", daysLeft
 		}
 		return "lose", daysLeft
 	}
+	daysLeft = int(deadline.Sub(now).Hours() / 24)
 	if daysLeft < 0 {
 		return "lose", daysLeft
 	}
@@ -83,7 +92,7 @@ func (h *Handler) ListByBoard(w http.ResponseWriter, r *http.Request) {
 		SELECT bt.id, bt.board_id, bt.name, bt.start_date, bt.deadline,
 		       bt.default_pic_user_id, bt.on_hold,
 		       COALESCE(agg.actual_pct, 0) AS actual_pct,
-		       so.signed_by, so.signed_at,
+		       so.signed_by, so.signed_at, so.signed_at_backdated_by, bt.updated_by,
 		       COALESCE(mem.user_ids, ARRAY[]::text[]) AS member_user_ids
 		FROM big_tasks bt
 		LEFT JOIN (
@@ -122,7 +131,8 @@ func (h *Handler) ListByBoard(w http.ResponseWriter, r *http.Request) {
 		var signedAt *time.Time
 
 		if err := rows.Scan(&bt.ID, &bt.BoardID, &bt.Name, &startDate, &deadline,
-			&bt.DefaultPicUserID, &bt.OnHold, &bt.ActualPct, &signedBy, &signedAt, &bt.MemberUserIDs); err != nil {
+			&bt.DefaultPicUserID, &bt.OnHold, &bt.ActualPct, &signedBy, &signedAt,
+			&bt.SignedAtBackdatedBy, &bt.UpdatedBy, &bt.MemberUserIDs); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -135,7 +145,7 @@ func (h *Handler) ListByBoard(w http.ResponseWriter, r *http.Request) {
 
 		bt.ExpectedPct = computeExpectedPct(startDate, deadline, now)
 
-		verdict, daysLeft := computeVerdict(deadline, bt.Signed, now)
+		verdict, daysLeft := computeVerdict(deadline, signedAt, now)
 		bt.Verdict = verdict
 		bt.DaysLeft = daysLeft
 
@@ -160,7 +170,7 @@ func loadBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID string) (BigTa
 		SELECT bt.id, bt.board_id, bt.name, bt.start_date, bt.deadline,
 		       bt.default_pic_user_id, bt.on_hold,
 		       COALESCE(agg.actual_pct, 0) AS actual_pct,
-		       so.signed_by, so.signed_at,
+		       so.signed_by, so.signed_at, so.signed_at_backdated_by, bt.updated_by,
 		       COALESCE(mem.user_ids, ARRAY[]::text[]) AS member_user_ids
 		FROM big_tasks bt
 		LEFT JOIN (
@@ -182,7 +192,8 @@ func loadBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID string) (BigTa
 		) mem ON mem.big_task_id = bt.id
 		WHERE bt.id = $1
 	`, bigTaskID).Scan(&bt.ID, &bt.BoardID, &bt.Name, &startDate, &deadline,
-		&bt.DefaultPicUserID, &bt.OnHold, &bt.ActualPct, &signedBy, &signedAt, &bt.MemberUserIDs)
+		&bt.DefaultPicUserID, &bt.OnHold, &bt.ActualPct, &signedBy, &signedAt,
+		&bt.SignedAtBackdatedBy, &bt.UpdatedBy, &bt.MemberUserIDs)
 	if err != nil {
 		return BigTask{}, err
 	}
@@ -196,7 +207,7 @@ func loadBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID string) (BigTa
 	now := time.Now()
 	bt.ExpectedPct = computeExpectedPct(startDate, deadline, now)
 
-	verdict, daysLeft := computeVerdict(deadline, bt.Signed, now)
+	verdict, daysLeft := computeVerdict(deadline, signedAt, now)
 	bt.Verdict = verdict
 	bt.DaysLeft = daysLeft
 
@@ -345,11 +356,27 @@ func (h *Handler) SetMembers(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(bt)
 }
 
+type signOffRequest struct {
+	// SignedAt opsional, format "YYYY-MM-DD" -- CUMA dihormati kalau requester
+	// super_user (403 kalau non-super_user isi field ini). Dipakai buat backfill
+	// verdict data historical (sign-off "beneran" terjadi di masa lalu, bukan
+	// hari ini). Lihat decision-log-verdict-backfill-signoff-20260820.md.
+	SignedAt string `json:"signed_at"`
+}
+
 // SignOff mengimplementasikan POST /big-tasks/{big_task_id}/sign-off.
 // Ditolak (409) apabila actual_pct belum 100 (BRD RULE-07 / SRS FR-BRD-06).
 func (h *Handler) SignOff(w http.ResponseWriter, r *http.Request) {
 	bigTaskID := chi.URLParam(r, "bigTaskID")
 	userID := auth.UserIDFromContext(r.Context())
+
+	var req signOffRequest
+	_ = json.NewDecoder(r.Body).Decode(&req) // body opsional, boleh kosong/tanpa signed_at
+
+	if req.SignedAt != "" && !auth.IsSuperUser(r.Context()) {
+		http.Error(w, "cuma super_user yang bisa set tanggal sign-off custom", http.StatusForbidden)
+		return
+	}
 
 	var actualPct int
 	err := h.db.QueryRow(r.Context(), `
@@ -373,11 +400,54 @@ func (h *Handler) SignOff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	signedAt := time.Now()
+	var backdatedBy *string
+
+	if req.SignedAt != "" {
+		if _, perr := time.Parse("2006-01-02", req.SignedAt); perr != nil {
+			http.Error(w, "signed_at harus format YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		today := time.Now().Format("2006-01-02")
+		if req.SignedAt > today {
+			http.Error(w, "signed_at tidak boleh di masa depan", http.StatusBadRequest)
+			return
+		}
+
+		var startDateStr string
+		var lastEntryDate *string
+		if err := h.db.QueryRow(r.Context(), `
+			SELECT bt.start_date::text, (
+				SELECT MAX(de.entry_date)::text
+				FROM day_entries de
+				JOIN daily_tasks dt ON dt.id = de.daily_task_id
+				WHERE dt.big_task_id = bt.id
+			)
+			FROM big_tasks bt WHERE bt.id = $1
+		`, bigTaskID).Scan(&startDateStr, &lastEntryDate); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if req.SignedAt < startDateStr {
+			http.Error(w, "signed_at tidak boleh sebelum start_date Big Task", http.StatusBadRequest)
+			return
+		}
+		if lastEntryDate != nil && req.SignedAt < *lastEntryDate {
+			http.Error(w, "signed_at tidak boleh sebelum tanggal day entry terakhir", http.StatusBadRequest)
+			return
+		}
+
+		parsed, _ := time.Parse("2006-01-02", req.SignedAt)
+		signedAt = parsed
+		backdated := userID
+		backdatedBy = &backdated
+	}
+
 	_, err = h.db.Exec(r.Context(), `
-		INSERT INTO big_task_signoffs (id, big_task_id, signed_by)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (big_task_id) DO UPDATE SET signed_by = $3, signed_at = now()
-	`, uuid.New().String(), bigTaskID, userID)
+		INSERT INTO big_task_signoffs (id, big_task_id, signed_by, signed_at, signed_at_backdated_by)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (big_task_id) DO UPDATE SET signed_by = $3, signed_at = $4, signed_at_backdated_by = $5
+	`, uuid.New().String(), bigTaskID, userID, signedAt, backdatedBy)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -405,6 +475,59 @@ func (h *Handler) ToggleOnHold(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	bt, err := loadBigTask(r.Context(), h.db, bigTaskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bt)
+}
+
+type updateBigTaskRequest struct {
+	Name      *string `json:"name"`
+	StartDate *string `json:"start_date"`
+	Deadline  *string `json:"deadline"`
+}
+
+// Update mengimplementasikan PATCH /big-tasks/{big_task_id} -- super_user only,
+// partial update (name/start_date/deadline). Dipakai a.l. buat koreksi data
+// biasa, dan sebagai salah satu jalur remediasi verdict backfill (geser
+// deadline sebelum sign-off) -- lihat
+// decision-log-verdict-backfill-signoff-20260820.md. on_hold TETAP lewat
+// endpoint terpisah yang sudah ada (ToggleOnHold), gak masuk sini.
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	if !auth.IsSuperUser(r.Context()) {
+		http.Error(w, "cuma super_user yang bisa edit big task", http.StatusForbidden)
+		return
+	}
+	bigTaskID := chi.URLParam(r, "bigTaskID")
+
+	var req updateBigTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Name == nil && req.StartDate == nil && req.Deadline == nil {
+		http.Error(w, "tidak ada field yang diubah", http.StatusBadRequest)
+		return
+	}
+
+	userID := auth.UserIDFromContext(r.Context())
+	_, err := h.db.Exec(r.Context(), `
+		UPDATE big_tasks SET
+			name = COALESCE($2, name),
+			start_date = COALESCE($3, start_date),
+			deadline = COALESCE($4, deadline),
+			updated_by = $5,
+			updated_at = now()
+		WHERE id = $1
+	`, bigTaskID, req.Name, req.StartDate, req.Deadline, userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	bt, err := loadBigTask(r.Context(), h.db, bigTaskID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

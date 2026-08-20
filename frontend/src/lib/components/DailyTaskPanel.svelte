@@ -6,7 +6,7 @@
   import type { AssignableUser, DailyTask, DayEntry } from '$lib/types';
   import Avatar from './Avatar.svelte';
   import DayEntryEditModal from './DayEntryEditModal.svelte';
-  import { Plus, Trash2, MessageSquare } from 'lucide-svelte';
+  import { Plus, Trash2, MessageSquare, ChevronDown, ChevronRight } from 'lucide-svelte';
 
   export let bigTaskId: string;
   // Anggota Big Task (dari BigTaskList) — membatasi pilihan PIC daily task &
@@ -42,6 +42,41 @@
   let cloneError: string | null = null;
 
   let entryModal: { entry: DayEntry | null; dailyTaskId: string; prefillDate: string; isPast: boolean } | null = null;
+
+  // Collapse daily task card -- UI state doang, TIDAK persist ke DB (localStorage
+  // browser per-device, default SEMUA collapsed). Lihat
+  // decision-log-boards-dashboard-enhancements-20260820.md.
+  const COLLAPSE_STORAGE_KEY = 'rndops_daily_task_expanded_ids';
+  let expandedIds = new Set<string>();
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY);
+      if (raw) expandedIds = new Set(JSON.parse(raw));
+    } catch {
+      // localStorage gak kebaca (mode private/disabled dst) -- fallback ke semua collapsed.
+    }
+  }
+  function toggleCollapse(id: string) {
+    if (expandedIds.has(id)) expandedIds.delete(id);
+    else expandedIds.add(id);
+    expandedIds = expandedIds; // Set mutation butuh reassign biar Svelte re-render.
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify([...expandedIds]));
+      } catch {
+        // abaikan -- collapse cuma preferensi tampilan, gak fatal kalau gagal disimpan.
+      }
+    }
+  }
+
+  // Filter status: default cuma nampilin yang "ongoing" (belum 100% DAN belum
+  // lewat end_date) -- toggle buat nampilin yang sudah selesai/lampau juga.
+  let showCompleted = false;
+  function isOngoing(dt: DailyTask): boolean {
+    return !(dt.actual_pct === 100 || dt.end_date < today);
+  }
+  $: visibleDailyTasks = showCompleted ? dailyTasks : dailyTasks.filter(isOngoing);
+  $: hiddenCount = dailyTasks.length - visibleDailyTasks.length;
 
   // Nama reviewer terpilih (buat preview judul "[Review <nama>] ...").
   $: minDate = $auth.user?.access_level === 'super_user' ? '' : new Date().toLocaleDateString('en-CA');
@@ -206,15 +241,28 @@
     <p class="small" style="color:var(--win-red)">{error}</p>
   {/if}
 
-  {#each dailyTasks as dt (dt.id)}
+  {#if dailyTasks.length > 0}
+    <label class="small muted daily-task-filter">
+      <input type="checkbox" bind:checked={showCompleted} />
+      Tampilkan yang sudah selesai/lampau {#if !showCompleted && hiddenCount > 0}({hiddenCount} disembunyikan){/if}
+    </label>
+  {/if}
+
+  {#each visibleDailyTasks as dt (dt.id)}
     {@const pic = picById[dt.pic_user_id]}
+    {@const expanded = expandedIds.has(dt.id)}
     <div class="daily-task-card" class:daily-task-card-review={dt.title.startsWith('[Review ')}>
-      <div class="daily-task-head">
-        <div>
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="daily-task-head" on:click={() => toggleCollapse(dt.id)} style="cursor:pointer">
+        <div style="display:flex;align-items:center;gap:4px">
+          {#if expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}
           <span class="daily-task-title">{dt.title}</span>
           <span class="muted small" style="margin-left:8px">{dt.start_date} → {dt.end_date}</span>
         </div>
-        <div class="daily-task-head-right">
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div class="daily-task-head-right" on:click|stopPropagation>
           {#if pic}
             <Avatar initials={pic.initials} size={20} title={pic.display_name} />
             <span class="small">{pic.display_name}</span>
@@ -227,78 +275,82 @@
         </div>
       </div>
 
-      {#if cloneForm?.dailyTaskId === dt.id}
-        <form class="inline-form" on:submit|preventDefault={submitClone} style="margin:0; border-top:1px solid var(--np-border, #C3C8CC)">
-          <span class="small muted">Reviewer:</span>
-          <select class="inline-input" bind:value={cloneReviewerId} required style="width:180px">
-            {#each members as m (m.id)}
-              <option value={m.id}>{m.display_name} — {m.roles.join('/')}</option>
-            {/each}
-          </select>
-          <span class="small">→ "[Review {cloneReviewerName}] {dt.title}" untuk tanggal:</span>
-          <input class="inline-input" type="date" bind:value={cloneStart} min={minDate} required style="width:140px" />
-          <input class="inline-input" type="date" bind:value={cloneEnd} min={minDate} required style="width:140px" />
-          {#if cloneError}<span class="small" style="color:var(--win-red)">{cloneError}</span>{/if}
-          <button class="quick-btn quick-btn-done" type="submit" disabled={cloning}>{cloning ? 'Menyimpan...' : 'Buat'}</button>
-          <button class="quick-btn" type="button" on:click={() => (cloneForm = null)}>Batal</button>
-        </form>
-      {/if}
+      {#if expanded}
+        {#if cloneForm?.dailyTaskId === dt.id}
+          <form class="inline-form" on:submit|preventDefault={submitClone} style="margin:0; border-top:1px solid var(--np-border, #C3C8CC)">
+            <span class="small muted">Reviewer:</span>
+            <select class="inline-input" bind:value={cloneReviewerId} required style="width:180px">
+              {#each members as m (m.id)}
+                <option value={m.id}>{m.display_name} — {m.roles.join('/')}</option>
+              {/each}
+            </select>
+            <span class="small">→ "[Review {cloneReviewerName}] {dt.title}" untuk tanggal:</span>
+            <input class="inline-input" type="date" bind:value={cloneStart} min={minDate} required style="width:140px" />
+            <input class="inline-input" type="date" bind:value={cloneEnd} min={minDate} required style="width:140px" />
+            {#if cloneError}<span class="small" style="color:var(--win-red)">{cloneError}</span>{/if}
+            <button class="quick-btn quick-btn-done" type="submit" disabled={cloning}>{cloning ? 'Menyimpan...' : 'Buat'}</button>
+            <button class="quick-btn" type="button" on:click={() => (cloneForm = null)}>Batal</button>
+          </form>
+        {/if}
 
-      <table class="sheet-table daily-day-table">
-        <thead>
-          <tr>
-            <th>Tanggal</th>
-            <th>Rencana</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each dt.days as day (day.id)}
-            {@const past = isPastDate(day.entry_date)}
-            {@const pb = progressBadge(day.progress_pct)}
-            <!-- svelte-ignore a11y-click-events-have-key-events -->
-            <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-            <tr class="de-row {isWeekendDate(day.entry_date) ? 'row-weekend' : ''} {past ? 'row-past' : ''}"
-              on:click={() => openEditModal(day, dt.id, past)}>
-              <td class="mono small">
-                {day.entry_date}
-                {#if isWeekendDate(day.entry_date)}<span class="lembur-badge">lembur</span>{/if}
-                {#if past}<span class="past-badge">lampau</span>{/if}
-              </td>
-              <td class="de-planned-cell small">{day.planned_text || '—'}</td>
-              <td><span class="badge {pb.cls}">{pb.label}</span></td>
+        <table class="sheet-table daily-day-table">
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Rencana</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each dt.days as day (day.id)}
+              {@const past = isPastDate(day.entry_date)}
+              {@const pb = progressBadge(day.progress_pct)}
               <!-- svelte-ignore a11y-click-events-have-key-events -->
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-              <td class="day-row-actions" on:click|stopPropagation>
-                <button
-                  class="icon-btn"
-                  title={past ? 'Tanggal sudah lampau' : 'Tambah task lain di tanggal ' + day.entry_date}
-                  aria-label="Tambah task lain di tanggal {day.entry_date}"
-                  disabled={past}
-                  on:click={() => openNewEntryModal(dt.id, day.entry_date)}
-                >
-                  <Plus size={13} />
-                </button>
-                <button
-                  class="icon-btn icon-btn-danger"
-                  title={past ? 'Tanggal sudah lampau' : 'Hapus baris ' + day.entry_date}
-                  aria-label="Hapus baris {day.entry_date}"
-                  disabled={past}
-                  on:click={() => deleteDayEntry(day.id)}
-                >
-                  <Trash2 size={13} />
-                </button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+              <tr class="de-row {isWeekendDate(day.entry_date) ? 'row-weekend' : ''} {past ? 'row-past' : ''}"
+                on:click={() => openEditModal(day, dt.id, past)}>
+                <td class="mono small">
+                  {day.entry_date}
+                  {#if isWeekendDate(day.entry_date)}<span class="lembur-badge">lembur</span>{/if}
+                  {#if past}<span class="past-badge">lampau</span>{/if}
+                </td>
+                <td class="de-planned-cell small">{day.planned_text || '—'}</td>
+                <td><span class="badge {pb.cls}">{pb.label}</span></td>
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+                <td class="day-row-actions" on:click|stopPropagation>
+                  <button
+                    class="icon-btn"
+                    title={past ? 'Tanggal sudah lampau' : 'Tambah task lain di tanggal ' + day.entry_date}
+                    aria-label="Tambah task lain di tanggal {day.entry_date}"
+                    disabled={past}
+                    on:click={() => openNewEntryModal(dt.id, day.entry_date)}
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    class="icon-btn icon-btn-danger"
+                    title={past ? 'Tanggal sudah lampau' : 'Hapus baris ' + day.entry_date}
+                    aria-label="Hapus baris {day.entry_date}"
+                    disabled={past}
+                    on:click={() => deleteDayEntry(day.id)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
     </div>
   {/each}
 
   {#if dailyTasks.length === 0}
     <div class="empty-note">Belum ada daily task buat big task ini.</div>
+  {:else if visibleDailyTasks.length === 0}
+    <div class="empty-note">Semua daily task di sini sudah selesai/lampau — centang di atas buat lihat.</div>
   {/if}
 
   {#if showCreateForm}

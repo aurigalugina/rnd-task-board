@@ -31,6 +31,8 @@ boards ─< big_tasks ─┬─< daily_tasks ─< day_entries
 
 boards ─< cheat_sheet_items
 
+boards ─< board_teams >─ referensi_tim
+
 big_tasks ─< weekly_push_log
 ```
 
@@ -73,8 +75,17 @@ big_tasks ─< weekly_push_log
 | description | text | Nama board + deskripsi (gantiin `tag` lama, migration `0017`) |
 | archived_at | timestamptz | NULL. Keberadaan = board diarsipkan (existence-pattern, migration `0020`). Board archived hilang dari `GET /boards`, TETAP muncul di Weekly Plan/Review Queue — lihat `decision-log-board-archive-20260812.md` |
 | archived_by | uuid | NULL. FK → users.id, audit trail siapa yang mengarsipkan |
+| category | text | NULL. `CHECK IN ('project','routine')`, TANPA default (board lama tetap NULL, tidak di-backfill). Migration `0023`. Dipakai filter Dashboard. Boleh diisi user manapun saat create; hanya `access_level=super_user` yang boleh ubah setelahnya (`PATCH /boards/{id}`). Lihat `decision-log-boards-dashboard-enhancements-20260820.md` |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
+
+### 3.4.1 `board_teams` (migration `0023`)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| board_id | uuid | FK → boards.id |
+| team_id | uuid | FK → referensi_tim.id |
+
+PK komposit `(board_id, team_id)`. Many-to-many — satu board boleh di-assign ke lebih dari satu tim. Keberadaan baris = board itu "kepunyaan"/relevan buat tim itu. `board.Create` otomatis insert satu baris untuk `org_team` pembuat board (join `users.org_team = referensi_tim.name`). Dipakai buat visibility: `GET /boards` untuk regular user dibatasi `EXISTS` subquery lewat tabel ini (match `users.org_team`); super_user tidak dibatasi, dapat filter `?team_id=` opsional. Replace penuh set via `PATCH /boards/{id} {team_ids}` (super_user only).
 
 ### 3.5 `big_tasks`
 | Kolom | Tipe | Keterangan |
@@ -86,6 +97,7 @@ big_tasks ─< weekly_push_log
 | deadline | date | |
 | default_pic_user_id | uuid | FK → users.id, nullable |
 | on_hold | boolean | Default false |
+| updated_by | uuid | NULL. FK → users.id. Migration `0022`. Diisi saat `PATCH /big-tasks/{id}` (super_user only, edit `name`/`start_date`/`deadline`) — audit trail siapa yang override data historis, lihat `decision-log-verdict-backfill-signoff-20260820.md` |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -98,8 +110,9 @@ Catatan: `actual_pct` dan `expected_pct` **tidak** menjadi kolom di tabel ini (l
 | big_task_id | uuid | FK → big_tasks.id, unique (satu Big Task hanya punya satu sign-off aktif) |
 | signed_by | uuid | FK → users.id |
 | signed_at | timestamptz | |
+| signed_at_backdated_by | uuid | NULL. FK → users.id. Migration `0022`. Diisi user_id super_user yang backdate `signed_at` manual lewat `POST /big-tasks/{id}/sign-off {signed_at}` — NULL berarti sign-off normal (waktu request). Audit trail, dipakai frontend buat indikator "(backdated)". Lihat `decision-log-verdict-backfill-signoff-20260820.md` |
 
-Keberadaan baris pada tabel ini = Big Task berstatus signed. Undo sign-off = hapus baris. Verdict `win`/`lose` ditentukan aplikasi dari kombinasi keberadaan baris ini, `signed_at` vs `deadline`, dan status `actual_pct`.
+Keberadaan baris pada tabel ini = Big Task berstatus signed. Undo sign-off = hapus baris. **Verdict `win`/`lose` (2026-08-20) dihitung dari `signed_at` vs `deadline`, BEKU sejak titik sign-off itu — bukan dibandingkan ke waktu request berjalan** (`computeVerdict` sebelumnya salah pakai `now()` walau sudah signed, menyebabkan Big Task yang sudah win bisa "flip" jadi lose kalau dibaca lama setelah deadline lewat; sudah diperbaiki, ada regression test).
 
 ### 3.7 `daily_tasks`
 | Kolom | Tipe | Keterangan |
@@ -294,3 +307,12 @@ GROUP BY dt.big_task_id;
 12. `0012_create_referensi_tim.sql` — `referensi_tim` (§3.15), seed `'R&D'`.
 13. `0013_create_referensi_user_hr.sql` — `referensi_user_hr` (§3.16), seed ~78 baris dari export HR.
 14. `0014_add_users_hr_access_level.sql` — tambah `users.access_level` dan `users.hr_user_id`, lihat `docs/decision-log/decision-log-hr-mapping-super-user-20260810.md`.
+15. `0015_rename_big_task_reviewers_to_members.sql` — rename `big_task_reviewers` → `big_task_members` (§3.14 sudah usang, konsep "reviewer per Big Task" digantikan "anggota Big Task"), lihat `docs/decision-log/decision-log-bigtask-members-refactor-20260811.md`.
+16. `0016_add_review_of_daily_task.sql` — tambah `daily_tasks.review_of_daily_task_id` (clone-review), dipakai Review Queue.
+17. `0017_board_description.sql` — `boards.tag` → `boards.description`.
+18. `0018_weekly_push_log_per_daily_task.sql` — granularitas `weekly_push_log` per Daily Task.
+19. `0019_notification_tables.sql` — tabel notifikasi (FR-NTF).
+20. `0020_boards_archive.sql` — `boards.archived_at`/`archived_by`, lihat `docs/decision-log/decision-log-board-archive-20260812.md`.
+21. `0021_change_requests_document_md.sql` — rename `change_requests.structured_doc_path` → `document_md`, lihat `docs/decision-log/decision-log-change-request-document-20260812.md`.
+22. `0022_bigtask_backdate_audit.sql` — `big_task_signoffs.signed_at_backdated_by`, `big_tasks.updated_by` (§3.5/§3.6), lihat `docs/decision-log/decision-log-verdict-backfill-signoff-20260820.md`.
+23. `0023_boards_category_teams.sql` — `boards.category`, tabel `board_teams` (§3.4.1), lihat `docs/decision-log/decision-log-boards-dashboard-enhancements-20260820.md`.

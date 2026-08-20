@@ -23,6 +23,12 @@ export type BoardAgg = {
   daysLeft: number;
   status: BoardStatus;
   verdict: BoardVerdict;
+  // Start = MIN(start_date) semua Big Task; Due = deadline Big Task yang JADI
+  // SUMBER daysLeft di atas (konsisten, bukan MAX terpisah) -- lihat
+  // decision-log-boards-dashboard-enhancements-20260820.md. '' kalau board
+  // belum punya Big Task sama sekali.
+  startDate: string;
+  dueDate: string;
 };
 
 export type BoardWithTasks = { boardId: string; boardName: string; bigTasks: BigTask[] };
@@ -54,9 +60,16 @@ export function aggregateBoards(groups: BoardWithTasks[]): BoardAgg[] {
     const avgExpectedPct = total ? Math.round(bigTasks.reduce((s, bt) => s + bt.expected_pct, 0) / total) : 0;
     const unresolved = bigTasks.filter((bt) => !bt.signed);
     const daysLeftSource = unresolved.length ? unresolved : bigTasks;
-    const daysLeft = daysLeftSource.length ? Math.min(...daysLeftSource.map((bt) => bt.days_left)) : 0;
+    let daysLeft = 0;
+    let dueDate = '';
+    if (daysLeftSource.length) {
+      const nearest = daysLeftSource.reduce((min, bt) => (bt.days_left < min.days_left ? bt : min));
+      daysLeft = nearest.days_left;
+      dueDate = nearest.deadline;
+    }
+    const startDate = total ? bigTasks.reduce((min, bt) => (bt.start_date < min ? bt.start_date : min), bigTasks[0].start_date) : '';
 
-    return { boardId, boardName, totalBigTasks: total, avgActualPct, avgExpectedPct, daysLeft, status, verdict };
+    return { boardId, boardName, totalBigTasks: total, avgActualPct, avgExpectedPct, daysLeft, status, verdict, startDate, dueDate };
   });
 }
 
@@ -101,4 +114,30 @@ export function computeDashboardStats(boards: BoardAgg[]): DashboardStats {
 // chart tidak berantakan.
 export function truncateName(name: string, maxLen = 12): string {
   return name.length > maxLen ? name.slice(0, maxLen - 1) + '…' : name;
+}
+
+// Palet kategorikal buat IDENTITAS board di chart (dot/legend), BUKAN warna
+// bar expected/actual (itu tetap abu-abu/biru, maknanya jangan berubah) --
+// gantiin teks nama panjang yang saling tabrakan di sumbu-X (dikeluhkan
+// user), pola sama seperti DonutChart (warna + legend terpisah). Palet dari
+// skill dataviz (8 hue, tervalidasi CVD-safe utk light & dark). Lihat
+// decision-log-boards-dashboard-enhancements-20260820.md.
+const BOARD_CHART_COLORS_LIGHT = [
+  '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'
+];
+const BOARD_CHART_COLORS_DARK = [
+  '#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'
+];
+
+// Hash deterministik (bukan index posisi array) -- board yang sama SELALU
+// dapat warna sama walau daftar board di-filter/berubah urutan (identity
+// harus stabil, bukan ngikut rank). >8 board bisa share warna (batas palet
+// tervalidasi) -- legend tetap disambiguasi lewat nama, bukan warna doang.
+export function boardColor(boardId: string, dark = false): string {
+  const palette = dark ? BOARD_CHART_COLORS_DARK : BOARD_CHART_COLORS_LIGHT;
+  let hash = 0;
+  for (let i = 0; i < boardId.length; i++) {
+    hash = (hash * 31 + boardId.charCodeAt(i)) | 0;
+  }
+  return palette[Math.abs(hash) % palette.length];
 }

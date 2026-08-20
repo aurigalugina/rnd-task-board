@@ -2,37 +2,58 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { auth } from '$lib/stores/authStore';
-  import type { AssignableUser, Board, BigTask, UserProgressSummary } from '$lib/types';
+  import { theme } from '$lib/stores/themeStore';
+  import type { AssignableUser, Board, BoardCategory, BigTask, ReferensiTim, UserProgressSummary } from '$lib/types';
   import VerdictBadge from '$lib/components/VerdictBadge.svelte';
   import DualBar from '$lib/components/DualBar.svelte';
   import StatCard from '$lib/components/StatCard.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
   import DonutChart from '$lib/components/DonutChart.svelte';
   import GroupedBarChart from '$lib/components/GroupedBarChart.svelte';
-  import { aggregateBoards, computeDashboardStats, truncateName, type BoardWithTasks } from '$lib/dashboardStats';
+  import { aggregateBoards, boardColor, computeDashboardStats, type BoardWithTasks } from '$lib/dashboardStats';
 
   let boardGroups: BoardWithTasks[] = [];
   let team: AssignableUser[] = [];
+  let teams: ReferensiTim[] = [];
   let progressSummaries: UserProgressSummary[] = [];
   let loading = true;
   let error: string | null = null;
+
+  $: isSuperUser = $auth.user?.access_level === 'super_user';
+  $: dark = $theme.includes('dark');
+
+  // Filter tim/kategori/user (2026-08-20) -- lihat
+  // decision-log-boards-dashboard-enhancements-20260820.md. Kategori & tim
+  // difilter SERVER-SIDE (query param GET /boards, regular user otomatis
+  // kebatasi ke tim-nya sendiri di backend, gak ada picker tim buat dia).
+  // Filter user (member Big Task) diterapkan CLIENT-SIDE setelah fetch.
+  let categoryFilter: '' | BoardCategory = '';
+  let teamFilter = ''; // super_user only
+  let userFilter = ''; // regular: '' | id sendiri (toggle Saya/Semua); super_user: '' | id siapa pun
 
   // Dashboard mengagregasi LINTAS SEMUA board di client — tidak ada endpoint
   // backend baru buat ini, cukup fetch big-tasks tiap board lalu digabung.
   // POV Dashboard adalah per BOARD (=project), bukan per Big Task — lihat
   // docs/decision-log/decision-log-dashboard-board-level-aggregation-20260810.md.
-  onMount(async () => {
+  async function loadDashboard() {
+    loading = true;
+    error = null;
     try {
+      const params = new URLSearchParams();
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (isSuperUser && teamFilter) params.set('team_id', teamFilter);
+      const qs = params.toString();
       const [boards, users, summaries] = await Promise.all([
-        api.get<Board[]>('/boards'),
-        api.get<AssignableUser[]>('/users/assignable'),
+        api.get<Board[]>(`/boards${qs ? '?' + qs : ''}`),
+        team.length ? Promise.resolve(team) : api.get<AssignableUser[]>('/users/assignable'),
         api.get<UserProgressSummary[]>('/users/progress-summary')
       ]);
       team = users;
       progressSummaries = summaries;
       boardGroups = await Promise.all(
         boards.map(async (b) => {
-          const bigTasks = await api.get<BigTask[]>(`/boards/${b.id}/big-tasks`);
+          let bigTasks = await api.get<BigTask[]>(`/boards/${b.id}/big-tasks`);
+          if (userFilter) bigTasks = bigTasks.filter((bt) => bt.member_user_ids.includes(userFilter));
           return { boardId: b.id, boardName: b.name, bigTasks };
         })
       );
@@ -41,9 +62,13 @@
     } finally {
       loading = false;
     }
+  }
+
+  onMount(async () => {
+    teams = await api.get<ReferensiTim[]>('/referensi-tim').catch(() => []);
+    await loadDashboard();
   });
 
-  $: isSuperUser = $auth.user?.access_level === 'super_user';
   $: progressByUserId = Object.fromEntries(progressSummaries.map((s) => [s.user_id, s]));
 
   $: stats = computeDashboardStats(aggregateBoards(boardGroups));
@@ -75,9 +100,11 @@
     { name: 'Lose', value: lose, color: 'var(--win-red)' }
   ];
   $: progressChartData = activeBoards.map((b) => ({
-    name: truncateName(b.boardName),
+    id: b.boardId,
+    name: b.boardName,
     actual: b.avgActualPct,
-    expected: b.avgExpectedPct
+    expected: b.avgExpectedPct,
+    color: boardColor(b.boardId, dark)
   }));
 
   // VerdictBadge cuma kenal Verdict big task ('on_progress'|'win'|'lose') —
@@ -90,6 +117,44 @@
 <div class="dash-heading">
   <span class="dash-heading-title">Project tracking dashboard — R&amp;D</span>
   <span class="muted small">Live dari semua board dan big task</span>
+</div>
+
+<div class="dash-filters">
+  <select class="inline-input" style="width:auto" bind:value={categoryFilter} on:change={loadDashboard}>
+    <option value="">Semua kategori</option>
+    <option value="project">Project</option>
+    <option value="routine">Routine</option>
+  </select>
+
+  {#if isSuperUser}
+    <select class="inline-input" style="width:auto" bind:value={teamFilter} on:change={loadDashboard}>
+      <option value="">Semua tim</option>
+      {#each teams as t (t.id)}
+        <option value={t.id}>{t.name}</option>
+      {/each}
+    </select>
+    <select class="inline-input" style="width:auto" bind:value={userFilter} on:change={loadDashboard}>
+      <option value="">Semua orang</option>
+      {#each team as u (u.id)}
+        <option value={u.id}>{u.display_name}</option>
+      {/each}
+    </select>
+  {:else}
+    <div class="role-filter-pills">
+      <button
+        class="role-filter-pill {!userFilter ? 'role-filter-pill-active' : ''}"
+        on:click={() => { userFilter = ''; loadDashboard(); }}
+      >
+        Semua
+      </button>
+      <button
+        class="role-filter-pill {userFilter ? 'role-filter-pill-active' : ''}"
+        on:click={() => { userFilter = $auth.user?.id ?? ''; loadDashboard(); }}
+      >
+        Saya
+      </button>
+    </div>
+  {/if}
 </div>
 
 {#if loading}
@@ -170,17 +235,19 @@
     <div class="section">
       <div class="section-title">Deadline terdekat</div>
       <table class="sheet-table">
-        <thead><tr><th>Nama project</th><th>Sisa hari</th><th>Actual</th></tr></thead>
+        <thead><tr><th>Nama project</th><th>Start</th><th>Due</th><th>Sisa hari</th><th>Actual</th></tr></thead>
         <tbody>
           {#each nearestDeadline as b (b.boardId)}
             <tr class:row-overdue={b.daysLeft < 0}>
               <td>{b.boardName}</td>
+              <td class="mono small">{b.startDate || '—'}</td>
+              <td class="mono small">{b.dueDate || '—'}</td>
               <td class="mono {b.daysLeft < 0 ? 'days-late' : ''}">{b.daysLeft}</td>
               <td class="mono">{b.avgActualPct}%</td>
             </tr>
           {/each}
           {#if nearestDeadline.length === 0}
-            <tr><td colspan="3" class="empty-note">Tidak ada deadline mendatang.</td></tr>
+            <tr><td colspan="5" class="empty-note">Tidak ada deadline mendatang.</td></tr>
           {/if}
         </tbody>
       </table>

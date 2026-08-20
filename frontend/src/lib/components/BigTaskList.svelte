@@ -10,7 +10,7 @@
   import DailyTaskPanel from './DailyTaskPanel.svelte';
   import CommentModal from './CommentModal.svelte';
   import CheatSheetSection from './CheatSheetSection.svelte';
-  import { Check, CirclePause, CirclePlay, X } from 'lucide-svelte';
+  import { Check, CirclePause, CirclePlay, Pencil, X } from 'lucide-svelte';
 
   export let boardId: string;
 
@@ -48,6 +48,44 @@
   }
 
   $: isSpv = $auth.user?.roles.includes('spv') ?? false;
+  // Backdate signed_at & edit judul/tanggal Big Task -- super_user only, lihat
+  // decision-log-verdict-backfill-signoff-20260820.md.
+  $: isSuperUser = $auth.user?.access_level === 'super_user';
+  let signOffDate = '';
+
+  let editingBigTask = false;
+  let editName = '';
+  let editStartDate = '';
+  let editDeadline = '';
+  let savingBigTaskEdit = false;
+  let bigTaskEditError = '';
+
+  function openEditBigTask() {
+    if (!activeBt) return;
+    editName = activeBt.name;
+    editStartDate = activeBt.start_date;
+    editDeadline = activeBt.deadline;
+    bigTaskEditError = '';
+    editingBigTask = true;
+  }
+  async function saveBigTaskEdit() {
+    if (!activeBt) return;
+    savingBigTaskEdit = true;
+    bigTaskEditError = '';
+    try {
+      await api.patch(`/big-tasks/${activeBt.id}`, {
+        name: editName,
+        start_date: editStartDate,
+        deadline: editDeadline
+      });
+      editingBigTask = false;
+      await load({ silent: true });
+    } catch (e) {
+      bigTaskEditError = (e as Error).message;
+    } finally {
+      savingBigTaskEdit = false;
+    }
+  }
 
   // Anggota Big Task aktif (objek user lengkap) — dipakai buat summary di header
   // DAN diteruskan ke DailyTaskPanel supaya PIC picker + reviewer clone-review
@@ -145,7 +183,9 @@
   async function signOff(bt: BigTask) {
     actionError = '';
     try {
-      await api.post(`/big-tasks/${bt.id}/sign-off`);
+      const body = isSuperUser && signOffDate ? { signed_at: signOffDate } : {};
+      await api.post(`/big-tasks/${bt.id}/sign-off`, body);
+      signOffDate = '';
       await load({ silent: true });
     } catch (e) {
       actionError = (e as Error).message;
@@ -232,6 +272,9 @@
           <span>{activeBt.name} — daily task</span>
           <div class="bigtask-detail-title-right">
             <VerdictBadge verdict={activeBt.verdict} />
+            {#if isSuperUser}
+              <button class="quick-btn" on:click={openEditBigTask} title="Edit judul/tanggal"><Pencil size={12} />&nbsp;Edit</button>
+            {/if}
             {#if isSpv}
               <button
                 class="hold-btn {activeBt.on_hold ? 'hold-btn-active' : ''}"
@@ -246,7 +289,19 @@
               </button>
               {#if activeBt.signed}
                 <button class="sign-btn sign-btn-active" on:click={() => undoSignOff(activeBt)}><Check size={12} />&nbsp;Signed done</button>
+                {#if activeBt.signed_at_backdated_by}
+                  <span class="muted small" title="Tanggal sign-off di-backdate manual oleh super_user">(backdated)</span>
+                {/if}
               {:else}
+                {#if isSuperUser}
+                  <input
+                    class="inline-input"
+                    type="date"
+                    bind:value={signOffDate}
+                    style="width:130px"
+                    title="Tanggal sign-off custom (opsional, kosongkan buat pakai hari ini)"
+                  />
+                {/if}
                 <button
                   class="sign-btn"
                   disabled={activeBt.actual_pct < 100 || activeBt.on_hold}
@@ -362,6 +417,49 @@
               {creating ? 'Menyimpan...' : 'Simpan big task'}
             </button>
             <button class="quick-btn" type="button" on:click={() => (showCreateForm = false)}>Batal</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal edit big task (judul/tanggal, super_user only) -->
+{#if editingBigTask && activeBt}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="overlay overlay-center" on:click={() => (editingBigTask = false)}>
+    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <div class="modal-box bigtask-create-modal" role="dialog" on:click|stopPropagation>
+      <div class="de-modal-header">
+        <span class="de-modal-title">Edit big task</span>
+        <button class="de-close-btn icon-btn" on:click={() => (editingBigTask = false)}><X size={12} /></button>
+      </div>
+      <div class="modal-body">
+        <form on:submit|preventDefault={saveBigTaskEdit}>
+          <div class="panel-field">
+            <label class="small muted" for="bt-edit-name">Nama big task</label>
+            <input id="bt-edit-name" class="inline-input" bind:value={editName} required />
+          </div>
+          <div class="panel-field">
+            <span class="small muted">Rentang waktu</span>
+            <div class="inline-form-dates" style="padding:0">
+              <label class="small muted">
+                Mulai
+                <input class="inline-input" type="date" bind:value={editStartDate} required />
+              </label>
+              <label class="small muted">
+                Deadline
+                <input class="inline-input" type="date" bind:value={editDeadline} required />
+              </label>
+            </div>
+          </div>
+          {#if bigTaskEditError}<p class="small" style="color:var(--win-red);margin:0">{bigTaskEditError}</p>{/if}
+          <div class="inline-form-actions" style="padding-top:4px">
+            <button class="quick-btn quick-btn-done" type="submit" disabled={savingBigTaskEdit}>
+              {savingBigTaskEdit ? 'Menyimpan...' : 'Simpan perubahan'}
+            </button>
+            <button class="quick-btn" type="button" on:click={() => (editingBigTask = false)}>Batal</button>
           </div>
         </form>
       </div>

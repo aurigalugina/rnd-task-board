@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateBoards, computeDashboardStats, truncateName, type BoardWithTasks } from './dashboardStats';
+import { aggregateBoards, boardColor, computeDashboardStats, truncateName, type BoardWithTasks } from './dashboardStats';
 import type { BigTask } from './types';
 
 function fakeBigTask(overrides: Partial<BigTask>): BigTask {
@@ -18,6 +18,8 @@ function fakeBigTask(overrides: Partial<BigTask>): BigTask {
     signed: false,
     signed_by: null,
     signed_at: null,
+    signed_at_backdated_by: null,
+    updated_by: null,
     member_user_ids: [],
     ...overrides
   };
@@ -198,5 +200,29 @@ describe('truncateName', () => {
 
   it('respects a custom max length', () => {
     expect(truncateName('Hello World', 5)).toBe('Hell…');
+  });
+});
+
+describe('boardColor', () => {
+  it('is deterministic — same id always returns the same color', () => {
+    const id = 'board-abc-123';
+    expect(boardColor(id)).toBe(boardColor(id));
+    expect(boardColor(id, true)).toBe(boardColor(id, true));
+  });
+
+  it('returns a different palette for dark vs light for at least one id', () => {
+    // Bukan tiap id pasti beda (bisa kebetulan sama), tapi minimal SATU id
+    // di antara beberapa contoh harus beda -- kalau semua sama, berarti
+    // parameter `dark` gak ngaruh sama sekali (bug).
+    const ids = ['a', 'bb', 'ccc', 'dddd', 'eeeee', 'ffffff'];
+    const anyDifferent = ids.some((id) => boardColor(id) !== boardColor(id, true));
+    expect(anyDifferent).toBe(true);
+  });
+
+  it('always returns a valid 6-digit hex color', () => {
+    for (const id of ['x', 'board-1', 'a-very-long-board-id-string-here']) {
+      expect(boardColor(id)).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(boardColor(id, true)).toMatch(/^#[0-9a-f]{6}$/i);
+    }
   });
 });
