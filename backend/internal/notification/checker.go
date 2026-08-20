@@ -38,7 +38,6 @@ func computeAlertsForUser(ctx context.Context, db *pgxpool.Pool, userID string, 
 				b.name                                                        AS board_name,
 				bt.start_date,
 				bt.deadline,
-				bt.signed,
 				bt.on_hold,
 				FLOOR(EXTRACT(EPOCH FROM (bt.deadline - NOW())) / 86400)::int AS days_left,
 				COALESCE(ROUND(AVG(de.progress_pct))::int, 0)                AS actual_pct
@@ -46,7 +45,8 @@ func computeAlertsForUser(ctx context.Context, db *pgxpool.Pool, userID string, 
 			JOIN boards b ON b.id = bt.board_id
 			LEFT JOIN daily_tasks dt ON dt.big_task_id = bt.id
 			LEFT JOIN day_entries de ON de.daily_task_id = dt.id
-			WHERE bt.signed = false AND bt.on_hold = false
+			WHERE NOT EXISTS (SELECT 1 FROM big_task_signoffs so WHERE so.big_task_id = bt.id)
+			  AND bt.on_hold = false
 			GROUP BY bt.id, b.name
 		)
 		SELECT
@@ -57,9 +57,9 @@ func computeAlertsForUser(ctx context.Context, db *pgxpool.Pool, userID string, 
 			bts.actual_pct,
 			LEAST(100, GREATEST(0,
 				CASE
-					WHEN EXTRACT(EPOCH FROM (bts.deadline - bts.start_date)) <= 0 THEN 100
-					ELSE (100.0 * EXTRACT(EPOCH FROM (NOW() - bts.start_date)) /
-					             EXTRACT(EPOCH FROM (bts.deadline - bts.start_date)))::int
+					WHEN (bts.deadline - bts.start_date) <= 0 THEN 100
+					ELSE (100.0 * EXTRACT(EPOCH FROM (NOW() - bts.start_date)) / 86400 /
+					             (bts.deadline - bts.start_date))::int
 				END
 			)) AS expected_pct
 		FROM bt_stats bts
@@ -87,19 +87,27 @@ func computeAlertsForUser(ctx context.Context, db *pgxpool.Pool, userID string, 
 			return nil, err
 		}
 
-		// Prioritas: sign_off_ready > verdict_lose > deadline_soon
-		// Satu big task hanya generate satu jenis alert.
-		switch {
-		case a.ActualPct >= 100 && s.NotifySignOffReady:
-			a.Type = SignOffReady
-			alerts = append(alerts, a)
-		case a.DaysLeft < 0 && s.NotifyVerdictLose:
-			a.Type = VerdictLose
-			alerts = append(alerts, a)
-		case a.DaysLeft >= 0 && a.DaysLeft <= s.DeadlineThresholdDays && s.NotifyDeadlineSoon:
-			a.Type = DeadlineSoon
+		if alertType, ok := classifyAlert(a.ActualPct, a.DaysLeft, s); ok {
+			a.Type = alertType
 			alerts = append(alerts, a)
 		}
 	}
 	return alerts, rows.Err()
+}
+
+// classifyAlert menentukan jenis alert (kalau ada) untuk satu big task belum-
+// signed berdasarkan actual_pct/days_left saat ini dan setting user. Prioritas:
+// sign_off_ready > verdict_lose > deadline_soon -- satu big task hanya generate
+// satu jenis alert. Fungsi murni supaya bisa ditest tanpa DB.
+func classifyAlert(actualPct, daysLeft int, s UserSettings) (alertType string, ok bool) {
+	switch {
+	case actualPct >= 100 && s.NotifySignOffReady:
+		return SignOffReady, true
+	case daysLeft < 0 && s.NotifyVerdictLose:
+		return VerdictLose, true
+	case daysLeft >= 0 && daysLeft <= s.DeadlineThresholdDays && s.NotifyDeadlineSoon:
+		return DeadlineSoon, true
+	default:
+		return "", false
+	}
 }
