@@ -164,6 +164,10 @@
 
   {#if createError}<p class="small" style="color:var(--win-red)">{createError}</p>{/if}
 
+  {#if selectedBoard?.description}
+    <div class="board-desc-banner">{selectedBoard.description}</div>
+  {/if}
+
   {#if selectedBoardId}
     <BigTaskList boardId={selectedBoardId} />
   {:else}
@@ -192,7 +196,7 @@
           </div>
           <div class="panel-field">
             <label class="small muted" for="board-desc">Deskripsi</label>
-            <input id="board-desc" class="inline-input" placeholder="Deskripsi singkat" bind:value={description} />
+            <textarea id="board-desc" class="inline-input inline-textarea" placeholder="Deskripsi board (boleh beberapa baris)..." bind:value={description} />
           </div>
           <div class="panel-field">
             <label class="small muted" for="board-category">Kategori</label>
@@ -259,7 +263,7 @@
         <form on:submit|preventDefault={saveBoardEdit}>
           <div class="panel-field">
             <label class="small muted" for="board-edit-desc">Deskripsi</label>
-            <input id="board-edit-desc" class="inline-input" bind:value={editDescription} />
+            <textarea id="board-edit-desc" class="inline-input inline-textarea" placeholder="Deskripsi board (boleh beberapa baris)..." bind:value={editDescription} />
           </div>
           <div class="panel-field">
             <label class="small muted" for="board-edit-category">Kategori</label>

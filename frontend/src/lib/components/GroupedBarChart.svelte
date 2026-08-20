@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+
   // Grouped bar chart custom SVG (actual vs expected) — bukan library, lihat
   // docs/decision-log/decision-log-design-system-adoption-20260809.md.
   //
@@ -10,6 +12,12 @@
   // dot cuma buat identitas board bukan gantiin makna warna bar. Lihat
   // decision-log-boards-dashboard-enhancements-20260820.md.
   export let data: { id: string; name: string; actual: number; expected: number; color: string }[];
+
+  // Shortcut klik dari dot/legend langsung ke tab board itu di halaman Boards
+  // (2026-08-20, permintaan user) -- pola sama seperti .board-link di app.css.
+  function goToBoard(id: string) {
+    goto(`/boards?board=${id}`);
+  }
 
   const vbW = 640;
   const vbH = 200;
@@ -40,7 +48,16 @@
     <g transform="translate({padLeft + i * groupW + groupW / 2}, 0)">
       <rect x={-barW - 2} y={y(d.expected)} width={barW} height={padTop + plotH - y(d.expected)} fill="#AEB6BC" />
       <rect x={2} y={y(d.actual)} width={barW} height={padTop + plotH - y(d.actual)} fill="var(--win-blue)" />
-      <circle cx="0" cy={vbH - padBottom + 6} r="4" fill={d.color}>
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <circle
+        cx="0"
+        cy={vbH - padBottom + 6}
+        r="4"
+        fill={d.color}
+        class="board-dot"
+        on:click={() => goToBoard(d.id)}
+      >
         <title>{d.name}</title>
       </circle>
     </g>
@@ -49,7 +66,9 @@
 
 <div class="chart-legend chart-legend-flow">
   {#each data as d (d.id)}
-    <div class="chart-legend-row">
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="chart-legend-row board-link-row" on:click={() => goToBoard(d.id)}>
       <span class="chart-legend-swatch" style="background:{d.color}" />
       <span class="small">{d.name}</span>
     </div>
@@ -58,4 +77,5 @@
 
 <style>
   .bar-chart :global(text) { font-family: inherit; }
+  .board-dot { cursor: pointer; }
 </style>

@@ -152,6 +152,15 @@ a { color: var(--win-blue); }
 .chart-legend-flow { flex-direction: row; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
 .chart-row { display: flex; align-items: center; gap: 8px; }
 
+/* Shortcut klik dari data project/board (Dashboard) langsung ke tab board-nya
+   di halaman Boards (?board=<id>) -- warna & underline cuma nongol di hover
+   biar gak keliatan kayak link textbook, sisanya tetap ikut styling teks
+   sekitarnya (attention-name, sheet-table td, legend). */
+a.board-link { color: inherit; text-decoration: none; cursor: pointer; }
+a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
+.chart-legend-row.board-link-row { cursor: pointer; }
+.chart-legend-row.board-link-row:hover .small { color: var(--win-blue); text-decoration: underline; }
+
 .sheet-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 /* .app sekarang fluid (ikut lebar browser) -- tabel kolom-dikit kayak ini
    dibatasi max-width di sini sendiri, biar gak jadi jarang-jarang di monitor
@@ -274,6 +283,16 @@ a { color: var(--win-blue); }
   border: 1px solid #C3C8CC; padding: 6px 10px; margin-bottom: 10px;
 }
 .project-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Deskripsi board -- highlight paling atas di halaman Boards (2026-08-20),
+   sebelum ini deskripsi diinput lewat form tapi gak pernah ditampilkan lagi
+   di mana pun. Teks boleh beberapa baris (memo), pre-wrap biar baris baru
+   dari textarea kepakai apa adanya. */
+.board-desc-banner {
+  background: var(--content-alt); border-left: 3px solid var(--win-blue);
+  padding: 8px 12px; margin-bottom: 12px; font-size: 11px; line-height: 1.5;
+  white-space: pre-wrap; color: var(--text-primary);
+}
 .status-done { background: var(--win-green); }
 .status-progress { background: var(--win-blue); }
 

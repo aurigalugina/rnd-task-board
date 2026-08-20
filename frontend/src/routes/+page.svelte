@@ -213,7 +213,7 @@
       {#each activeBoards as b (b.boardId)}
         <div class="attention-row">
           <div class="attention-main">
-            <span class="attention-name">{b.boardName}</span>
+            <a class="attention-name board-link" href="/boards?board={b.boardId}">{b.boardName}</a>
             <span class="muted small">{b.totalBigTasks} big task</span>
           </div>
           <div class="attention-bar">
@@ -239,7 +239,7 @@
         <tbody>
           {#each nearestDeadline as b (b.boardId)}
             <tr class:row-overdue={b.daysLeft < 0}>
-              <td>{b.boardName}</td>
+              <td><a class="board-link" href="/boards?board={b.boardId}">{b.boardName}</a></td>
               <td class="mono small">{b.startDate || '—'}</td>
               <td class="mono small">{b.dueDate || '—'}</td>
               <td class="mono {b.daysLeft < 0 ? 'days-late' : ''}">{b.daysLeft}</td>
@@ -259,7 +259,7 @@
         <tbody>
           {#each loseBoards as b (b.boardId)}
             <tr>
-              <td>{b.boardName}</td>
+              <td><a class="board-link" href="/boards?board={b.boardId}">{b.boardName}</a></td>
               <td class="mono">{b.avgActualPct}%</td>
               <td class="mono">{b.avgExpectedPct}%</td>
               <td class="mono days-late">{b.daysLeft}</td>
