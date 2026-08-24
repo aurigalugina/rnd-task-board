@@ -41,7 +41,7 @@
   // Persentase awal (opsional) -- bisa diisi langsung saat create, super_user
   // only. Sama dengan baseline_pct di edit, cuma gak perlu buka Edit lagi
   // abis Big Task kebuat. Lihat decision-log-bigtask-baseline-progress-20260824.md.
-  let createBaselinePct = '';
+  let createBaselinePct: string | number | undefined = '';
   let creating = false;
   let createError: string | null = null;
 
@@ -66,8 +66,18 @@
   // "Baseline Awal" -- persentase progress yang sudah berjalan di lapangan
   // sebelum Big Task ini dicatat di sistem (mis. migrasi data ke staging).
   // Kosong = tidak diubah. Lihat decision-log-bigtask-baseline-progress-20260824.md.
-  let editBaselinePct = '';
+  // Union string|number|undefined -- <input type="number"> Svelte MENGONVERSI
+  // bind:value ke number begitu user ngetik (bukan tetap string), dan ke
+  // undefined (bukan '') kalau field dikosongkan total. .trim() harus lewat
+  // toBaselineStr() di bawah, bukan dipanggil langsung ke variabel ini.
+  let editBaselinePct: string | number | undefined = '';
   let baselineExistedBeforeEdit = false;
+
+  // toBaselineStr -- helper murni buat baca input <input type="number">
+  // secara aman (lihat catatan tipe editBaselinePct/createBaselinePct di atas).
+  function toBaselineStr(v: string | number | undefined): string {
+    return v === undefined || v === null ? '' : String(v).trim();
+  }
 
   async function openEditBigTask() {
     if (!activeBt) return;
@@ -100,7 +110,7 @@
         start_date: editStartDate,
         deadline: editDeadline
       };
-      const trimmed = editBaselinePct.trim();
+      const trimmed = toBaselineStr(editBaselinePct);
       if (trimmed === '') {
         if (baselineExistedBeforeEdit) payload.clear_baseline = true;
       } else {
@@ -196,7 +206,7 @@
         deadline,
         member_user_ids: memberUserIds
       };
-      const trimmed = createBaselinePct.trim();
+      const trimmed = toBaselineStr(createBaselinePct);
       if (trimmed !== '') payload.baseline_pct = Number(trimmed);
       await api.post(`/boards/${boardId}/big-tasks`, payload);
       name = '';
