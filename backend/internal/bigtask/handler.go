@@ -222,6 +222,12 @@ type createBigTaskRequest struct {
 	Deadline         string   `json:"deadline"`
 	DefaultPicUserID *string  `json:"default_pic_user_id"`
 	MemberUserIDs    []string `json:"member_user_ids"`
+	// BaselinePct: persentase progress awal (opsional), sama seperti
+	// baseline_pct di PATCH /big-tasks/{id} -- bisa langsung diisi saat
+	// create supaya gak perlu buka Edit lagi abis Big Task kebuat. super_user
+	// only, konsisten dengan field ini di endpoint Update. Lihat
+	// decision-log-bigtask-baseline-progress-20260824.md.
+	BaselinePct *int `json:"baseline_pct"`
 }
 
 // dedupeMembers membuang id kosong & duplikat dari daftar anggota (fungsi murni,
@@ -264,6 +270,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Tidak bisa input tanggal lampau", http.StatusBadRequest)
 			return
 		}
+		if req.BaselinePct != nil {
+			http.Error(w, "cuma super_user yang bisa isi persentase awal", http.StatusForbidden)
+			return
+		}
+	}
+	if req.BaselinePct != nil && (*req.BaselinePct < 0 || *req.BaselinePct > 100) {
+		http.Error(w, "baseline_pct harus 0-100", http.StatusBadRequest)
+		return
 	}
 
 	id := uuid.New().String()
@@ -286,6 +300,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.Exec(r.Context(), `
 			INSERT INTO big_task_members (big_task_id, user_id) VALUES ($1, $2)
 		`, id, memberID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if req.BaselinePct != nil {
+		// default_pic_user_id boleh NULL saat create -- upsertBaseline sudah
+		// fallback ke anggota pertama (ORDER BY user_id) lewat COALESCE, jadi
+		// aman dipanggil di sini walau DefaultPicUserID kosong.
+		if err := upsertBaseline(r.Context(), tx, id, *req.BaselinePct); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

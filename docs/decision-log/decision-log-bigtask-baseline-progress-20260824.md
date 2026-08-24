@@ -12,7 +12,7 @@ Concern eksplisit dari user: penyesuaian ini **tidak boleh mengubah/menyentuh Da
 ## Keputusan
 
 - **Bukan kolom override terpisah.** Input persen baseline tetap di-cascade jadi day_entries beneran, konsisten dengan prinsip "satu sumber kebenaran" (`AVG(progress_pct)`) yang sudah dipakai di semua level (Daily Task/Big Task/Board/Dashboard).
-- **Mekanisme:** super_user isi field "Persentase awal (opsional)" di form edit Big Task (`PATCH /big-tasks/{bigTaskID}`). Backend otomatis:
+- **Mekanisme:** super_user isi field "Persentase awal (opsional)" di form edit Big Task (`PATCH /big-tasks/{bigTaskID}`) **ATAU langsung di form create** (`POST /boards/{boardID}/big-tasks`) — dua jalur pakai logika upsert yang sama, gak perlu buka Edit lagi setelah Big Task baru dibuat. Backend otomatis:
   - Auto-create **satu Daily Task khusus** berjudul `Baseline Awal`, `pic_user_id = default_pic_user_id` (fallback ke anggota pertama kalau `default_pic_user_id` NULL), `start_date = end_date = big_tasks.start_date`, ditandai `is_baseline = true` (kolom boolean baru, bukan match string judul — biar robust kalau judul diedit/diterjemahkan nanti).
   - Satu `day_entries` di tanggal itu dengan `progress_pct = input user`.
   - Daily Task ini TETAP MUNCUL NORMAL di daftar Daily Task (bukan disembunyikan) — transparan, PIC/anggota bisa lihat itu darimana asalnya.
@@ -32,8 +32,8 @@ Concern eksplisit dari user: penyesuaian ini **tidak boleh mengubah/menyentuh Da
 ## Dampak/File Terpengaruh
 
 - `backend/db/migrations/0024_bigtask_baseline_progress.up.sql`/`.down.sql` (baru) — `daily_tasks.is_baseline BOOLEAN NOT NULL DEFAULT false` + partial unique index `(big_task_id) WHERE is_baseline`.
-- `backend/internal/bigtask/handler.go` — `Update`: field baru `BaselinePct *int` di `updateBigTaskRequest`, logic upsert/delete Daily Task+day_entry baseline (transaksional, dalam `tx`).
+- `backend/internal/bigtask/handler.go` — `Update`: field baru `BaselinePct *int` di `updateBigTaskRequest`, logic upsert/delete Daily Task+day_entry baseline (transaksional, dalam `tx`). **`Create`: field `BaselinePct *int` juga di `createBigTaskRequest`** — dipanggil `upsertBaseline` yang sama di dalam transaksi create, super_user only (403 kalau non-super_user isi field ini saat create), validasi 0-100.
 - `backend/internal/dailytask/handler.go` — `DailyTask` struct dapat field `IsBaseline bool`.
 - `frontend/src/lib/types.ts` — `DailyTask.is_baseline`.
-- `frontend/src/lib/components/BigTaskList.svelte` — form edit Big Task dapat input "Persentase awal (opsional)"; badge/label "Baseline" di daftar Daily Task kalau `is_baseline`.
-- `docs/05-api-contract.md` §4 (`PATCH /big-tasks/{id}`), `docs/06-db-design.md` §3.7 — update kontrak & skema.
+- `frontend/src/lib/components/BigTaskList.svelte` — form edit Big Task dapat input "Persentase awal (opsional)"; **form create JUGA dapat field yang sama (super_user only)**; badge/label "Baseline" di daftar Daily Task kalau `is_baseline`.
+- `docs/05-api-contract.md` §4 (`PATCH /big-tasks/{id}` **dan `POST /boards/{id}/big-tasks`**), `docs/06-db-design.md` §3.7 — update kontrak & skema.

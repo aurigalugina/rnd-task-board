@@ -38,6 +38,10 @@
   let startDate = '';
   let deadline = '';
   let memberUserIds: string[] = [];
+  // Persentase awal (opsional) -- bisa diisi langsung saat create, super_user
+  // only. Sama dengan baseline_pct di edit, cuma gak perlu buka Edit lagi
+  // abis Big Task kebuat. Lihat decision-log-bigtask-baseline-progress-20260824.md.
+  let createBaselinePct = '';
   let creating = false;
   let createError: string | null = null;
 
@@ -186,16 +190,20 @@
     createError = null;
     creating = true;
     try {
-      await api.post(`/boards/${boardId}/big-tasks`, {
+      const payload: Record<string, unknown> = {
         name,
         start_date: startDate,
         deadline,
         member_user_ids: memberUserIds
-      });
+      };
+      const trimmed = createBaselinePct.trim();
+      if (trimmed !== '') payload.baseline_pct = Number(trimmed);
+      await api.post(`/boards/${boardId}/big-tasks`, payload);
       name = '';
       startDate = '';
       deadline = '';
       memberUserIds = [];
+      createBaselinePct = '';
       showCreateForm = false;
       await load({ silent: true });
     } catch (e) {
@@ -436,6 +444,25 @@
             </div>
             {#if memberUserIds.length < 2}<span class="small muted">Pilih minimal 2 anggota.</span>{/if}
           </div>
+          {#if isSuperUser}
+            <div class="panel-field">
+              <label class="small muted" for="bt-create-baseline">Persentase awal (opsional)</label>
+              <input
+                id="bt-create-baseline"
+                class="inline-input"
+                type="number"
+                min="0"
+                max="100"
+                placeholder="mis. 40"
+                bind:value={createBaselinePct}
+              />
+              <span class="small muted">
+                Progress yang sudah berjalan di lapangan sebelum dicatat di sistem (mis. migrasi data ke
+                staging) — dihitung sebagai Daily Task "Baseline Awal" terpisah. Bisa diisi/diadjust lagi
+                kapan saja lewat Edit.
+              </span>
+            </div>
+          {/if}
           {#if createError}<p class="small" style="color:var(--win-red);margin:0">{createError}</p>{/if}
           <div class="inline-form-actions" style="padding-top:4px">
             <button class="quick-btn quick-btn-done" type="submit" disabled={creating || memberUserIds.length < 2}>

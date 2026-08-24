@@ -121,8 +121,10 @@ Response 200:
 `reviewer_user_ids` — daftar user (bisa lebih dari satu, bisa kosong) yang jadi reviewer Daily Task di bawah Big Task ini lewat Review Queue (§9). Lihat `docs/decision-log/decision-log-bigtask-reviewer-assignment-20260810.md`.
 
 ### `POST /boards/{board_id}/big-tasks`
-Request: `{ "name", "start_date", "deadline", "default_pic_user_id", "reviewer_user_ids": ["uuid"] }` (`reviewer_user_ids` opsional, default `[]`).
+Request: `{ "name", "start_date", "deadline", "default_pic_user_id", "member_user_ids": ["uuid"], "baseline_pct": 0-100 }` (`member_user_ids` wajib minimal 2 — lihat `docs/decision-log/decision-log-bigtask-members-refactor-20260811.md`; `baseline_pct` opsional, super_user only — 403 kalau non-super_user mengisinya).
 Response 201: `{ "id": "uuid" }`.
+
+**Baseline Awal saat create (2026-08-24):** `baseline_pct` bisa langsung diisi saat Big Task baru dibuat (bukan cuma lewat `PATCH` setelahnya) — pakai mekanisme upsert yang sama seperti pada `PATCH /big-tasks/{id}` (lihat §4). Lihat `docs/decision-log/decision-log-bigtask-baseline-progress-20260824.md`.
 
 ### `POST /big-tasks/{big_task_id}/sign-off`
 Otorisasi: role `spv`. Ditolak (409) apabila `actual_pct` < 100.
