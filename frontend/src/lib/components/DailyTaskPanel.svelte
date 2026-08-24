@@ -258,7 +258,7 @@
         <div style="display:flex;align-items:center;gap:4px">
           {#if expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}
           <span class="daily-task-title">{dt.title}</span>
-          {#if dt.is_baseline}<span class="badge badge-neutral" title="Progress awal migrasi data, bukan Daily Task PIC biasa">Baseline</span>{/if}
+          {#if dt.is_baseline}<span class="badge badge-neutral" title="Progress awal migrasi data (adjustment percentage), bukan Daily Task PIC biasa">Adjustment</span>{/if}
           <span class="muted small" style="margin-left:8px">{dt.start_date} → {dt.end_date}</span>
         </div>
         <!-- svelte-ignore a11y-click-events-have-key-events -->

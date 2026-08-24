@@ -63,9 +63,10 @@
   let editDeadline = '';
   let savingBigTaskEdit = false;
   let bigTaskEditError = '';
-  // "Baseline Awal" -- persentase progress yang sudah berjalan di lapangan
-  // sebelum Big Task ini dicatat di sistem (mis. migrasi data ke staging).
-  // Kosong = tidak diubah. Lihat decision-log-bigtask-baseline-progress-20260824.md.
+  // "Adjustment Percentage" -- persentase progress yang sudah berjalan di
+  // lapangan sebelum Big Task ini dicatat di sistem (mis. migrasi data ke
+  // staging). Kosong = tidak diubah. Lihat
+  // decision-log-bigtask-baseline-progress-20260824.md.
   // Union string|number|undefined -- <input type="number"> Svelte MENGONVERSI
   // bind:value ke number begitu user ngetik (bukan tetap string), dan ke
   // undefined (bukan '') kalau field dikosongkan total. .trim() harus lewat
@@ -456,7 +457,7 @@
           </div>
           {#if isSuperUser}
             <div class="panel-field">
-              <label class="small muted" for="bt-create-baseline">Persentase awal (opsional)</label>
+              <label class="small muted" for="bt-create-baseline">Adjustment percentage (opsional)</label>
               <input
                 id="bt-create-baseline"
                 class="inline-input"
@@ -468,8 +469,8 @@
               />
               <span class="small muted">
                 Progress yang sudah berjalan di lapangan sebelum dicatat di sistem (mis. migrasi data ke
-                staging) — dihitung sebagai Daily Task "Baseline Awal" terpisah. Bisa diisi/diadjust lagi
-                kapan saja lewat Edit.
+                staging) — dihitung sebagai Daily Task "Adjustment Percentage" terpisah. Bisa diisi/diadjust
+                lagi kapan saja lewat Edit.
               </span>
             </div>
           {/if}
@@ -517,7 +518,7 @@
             </div>
           </div>
           <div class="panel-field">
-            <label class="small muted" for="bt-edit-baseline">Persentase awal (opsional)</label>
+            <label class="small muted" for="bt-edit-baseline">Adjustment percentage (opsional)</label>
             <input
               id="bt-edit-baseline"
               class="inline-input"
@@ -529,8 +530,8 @@
             />
             <span class="small muted">
               Progress yang sudah berjalan di lapangan sebelum dicatat di sistem (mis. migrasi data ke
-              staging) — dihitung sebagai Daily Task "Baseline Awal" terpisah, tidak mengubah Daily Task
-              lain. Kosongkan untuk menghapus baseline.
+              staging) — dihitung sebagai Daily Task "Adjustment Percentage" terpisah, tidak mengubah Daily
+              Task lain. Kosongkan untuk menghapus adjustment.
             </span>
           </div>
           {#if bigTaskEditError}<p class="small" style="color:var(--win-red);margin:0">{bigTaskEditError}</p>{/if}

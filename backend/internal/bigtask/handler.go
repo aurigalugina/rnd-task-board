@@ -555,7 +555,7 @@ func upsertBaseline(ctx context.Context, tx pgx.Tx, bigTaskID string, pct int) e
 		dailyTaskID = uuid.New().String()
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO daily_tasks (id, big_task_id, title, pic_user_id, start_date, end_date, is_baseline)
-			VALUES ($1, $2, 'Baseline Awal', $3, $4, $4, true)
+			VALUES ($1, $2, 'Adjustment Percentage', $3, $4, $4, true)
 		`, dailyTaskID, bigTaskID, picID, dateStr); err != nil {
 			return err
 		}
