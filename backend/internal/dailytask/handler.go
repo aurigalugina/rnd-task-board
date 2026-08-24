@@ -46,7 +46,12 @@ type DailyTask struct {
 	StartDate string     `json:"start_date"`
 	EndDate   string     `json:"end_date"`
 	ActualPct int        `json:"actual_pct"`
-	Days      []DayEntry `json:"days"`
+	// IsBaseline: true kalau ini Daily Task khusus "Baseline Awal" (progress
+	// awal migrasi data yang diisi lewat PATCH /big-tasks/{id} baseline_pct,
+	// bukan Daily Task PIC beneran) -- lihat
+	// decision-log-bigtask-baseline-progress-20260824.md.
+	IsBaseline bool       `json:"is_baseline"`
+	Days       []DayEntry `json:"days"`
 }
 
 // ListByBigTask mengimplementasikan GET /big-tasks/{big_task_id}/daily-tasks.
@@ -54,7 +59,7 @@ func (h *Handler) ListByBigTask(w http.ResponseWriter, r *http.Request) {
 	bigTaskID := chi.URLParam(r, "bigTaskID")
 
 	rows, err := h.db.Query(r.Context(), `
-		SELECT id, big_task_id, title, pic_user_id, start_date, end_date
+		SELECT id, big_task_id, title, pic_user_id, start_date, end_date, is_baseline
 		FROM daily_tasks WHERE big_task_id = $1 ORDER BY created_at
 	`, bigTaskID)
 	if err != nil {
@@ -67,7 +72,7 @@ func (h *Handler) ListByBigTask(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var dt DailyTask
 		var start, end time.Time
-		if err := rows.Scan(&dt.ID, &dt.BigTaskID, &dt.Title, &dt.PicUserID, &start, &end); err != nil {
+		if err := rows.Scan(&dt.ID, &dt.BigTaskID, &dt.Title, &dt.PicUserID, &start, &end, &dt.IsBaseline); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -128,9 +133,9 @@ func loadDailyTask(ctx context.Context, db *pgxpool.Pool, id string) (DailyTask,
 	var dt DailyTask
 	var start, end time.Time
 	err := db.QueryRow(ctx, `
-		SELECT id, big_task_id, title, pic_user_id, start_date, end_date
+		SELECT id, big_task_id, title, pic_user_id, start_date, end_date, is_baseline
 		FROM daily_tasks WHERE id = $1
-	`, id).Scan(&dt.ID, &dt.BigTaskID, &dt.Title, &dt.PicUserID, &start, &end)
+	`, id).Scan(&dt.ID, &dt.BigTaskID, &dt.Title, &dt.PicUserID, &start, &end, &dt.IsBaseline)
 	if err != nil {
 		return DailyTask{}, err
 	}

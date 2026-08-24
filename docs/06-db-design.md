@@ -123,6 +123,7 @@ Keberadaan baris pada tabel ini = Big Task berstatus signed. Undo sign-off = hap
 | pic_user_id | uuid | FK → users.id |
 | start_date | date | |
 | end_date | date | |
+| is_baseline | boolean | Default `false`. Migration `0024`. `true` = ini Daily Task khusus "Baseline Awal" (progress awal migrasi data, auto-dibuat lewat `PATCH /big-tasks/{id}` `baseline_pct`), bukan Daily Task PIC beneran. Maksimal satu per `big_task_id` (partial unique index). Lihat `decision-log-bigtask-baseline-progress-20260824.md`. |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -316,3 +317,4 @@ GROUP BY dt.big_task_id;
 21. `0021_change_requests_document_md.sql` — rename `change_requests.structured_doc_path` → `document_md`, lihat `docs/decision-log/decision-log-change-request-document-20260812.md`.
 22. `0022_bigtask_backdate_audit.sql` — `big_task_signoffs.signed_at_backdated_by`, `big_tasks.updated_by` (§3.5/§3.6), lihat `docs/decision-log/decision-log-verdict-backfill-signoff-20260820.md`.
 23. `0023_boards_category_teams.sql` — `boards.category`, tabel `board_teams` (§3.4.1), lihat `docs/decision-log/decision-log-boards-dashboard-enhancements-20260820.md`.
+24. `0024_bigtask_baseline_progress.sql` — `daily_tasks.is_baseline` + partial unique index (§3.7), lihat `docs/decision-log/decision-log-bigtask-baseline-progress-20260824.md`.

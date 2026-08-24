@@ -134,9 +134,11 @@ Otorisasi: role `spv`. Undo sign-off.
 Response 204.
 
 ### `PATCH /big-tasks/{big_task_id}` (super_user only, baru 2026-08-20)
-Request (parsial): `{ "name": "string", "start_date": "YYYY-MM-DD", "deadline": "YYYY-MM-DD" }`.
+Request (parsial): `{ "name": "string", "start_date": "YYYY-MM-DD", "deadline": "YYYY-MM-DD", "baseline_pct": 0-100, "clear_baseline": true }`.
 Otorisasi: `access_level=super_user` (cek in-handler) — 403 kalau bukan. Set `big_tasks.updated_by`.
 Response 200: Big Task object terbaru. Lihat `docs/decision-log/decision-log-verdict-backfill-signoff-20260820.md` — dipakai bareng backdate sign-off (mis. geser deadline dulu sebelum sign-off retroaktif).
+
+**Baseline Awal (2026-08-24):** `baseline_pct` (0-100) = persentase progress yang sudah berjalan di lapangan sebelum Big Task ini dicatat di sistem (mis. migrasi data ke staging). Bukan kolom override — server auto-create/update satu Daily Task khusus (`title: "Baseline Awal"`, `is_baseline: true`, `pic_user_id` = `default_pic_user_id` Big Task) + satu `day_entries` di `start_date` dengan `progress_pct = baseline_pct`; ikut normal ke `AVG` yang sudah dipakai di semua level, TIDAK PERNAH menyentuh Daily Task lain. Edit ulang meng-UPDATE `progress_pct` entry itu (bukan insert baru). `baseline_pct` dan `clear_baseline` tidak boleh dipakai bersamaan (400). Kirim `clear_baseline: true` untuk menghapus Daily Task+entry baseline. Lihat `docs/decision-log/decision-log-bigtask-baseline-progress-20260824.md`.
 
 **Catatan verdict (2026-08-20):** `verdict` untuk Big Task yang sudah `signed` dihitung dari `deadline` vs `signed_at` (BEKU sejak titik sign-off) — BUKAN dari `deadline` vs waktu request berjalan. Big Task yang di-sign-off tepat waktu tetap `"win"` selamanya walau dibaca ulang lama setelah deadline lewat.
 

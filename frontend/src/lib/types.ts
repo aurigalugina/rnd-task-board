@@ -78,6 +78,10 @@ export type DailyTask = {
   start_date: string;
   end_date: string;
   actual_pct: number;
+  // true kalau ini Daily Task khusus "Baseline Awal" (persentase progress
+  // awal migrasi data, diisi lewat PATCH /big-tasks/{id} baseline_pct) --
+  // lihat decision-log-bigtask-baseline-progress-20260824.md.
+  is_baseline: boolean;
   days: DayEntry[];
 };
 

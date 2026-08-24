@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { auth } from '$lib/stores/authStore';
-  import type { AssignableUser, BigTask } from '$lib/types';
+  import type { AssignableUser, BigTask, DailyTask } from '$lib/types';
   import VerdictBadge from './VerdictBadge.svelte';
   import DualBar from './DualBar.svelte';
   import StatCard from './StatCard.svelte';
@@ -59,13 +59,31 @@
   let editDeadline = '';
   let savingBigTaskEdit = false;
   let bigTaskEditError = '';
+  // "Baseline Awal" -- persentase progress yang sudah berjalan di lapangan
+  // sebelum Big Task ini dicatat di sistem (mis. migrasi data ke staging).
+  // Kosong = tidak diubah. Lihat decision-log-bigtask-baseline-progress-20260824.md.
+  let editBaselinePct = '';
+  let baselineExistedBeforeEdit = false;
 
-  function openEditBigTask() {
+  async function openEditBigTask() {
     if (!activeBt) return;
     editName = activeBt.name;
     editStartDate = activeBt.start_date;
     editDeadline = activeBt.deadline;
     bigTaskEditError = '';
+    editBaselinePct = '';
+    baselineExistedBeforeEdit = false;
+    try {
+      const days = await api.get<DailyTask[]>(`/big-tasks/${activeBt.id}/daily-tasks`);
+      const baseline = days.find((d) => d.is_baseline);
+      if (baseline) {
+        editBaselinePct = String(baseline.actual_pct);
+        baselineExistedBeforeEdit = true;
+      }
+    } catch {
+      // gagal ambil baseline existing bukan blocker -- field tetap kosong,
+      // user bisa isi ulang manual kalau perlu.
+    }
     editingBigTask = true;
   }
   async function saveBigTaskEdit() {
@@ -73,11 +91,18 @@
     savingBigTaskEdit = true;
     bigTaskEditError = '';
     try {
-      await api.patch(`/big-tasks/${activeBt.id}`, {
+      const payload: Record<string, unknown> = {
         name: editName,
         start_date: editStartDate,
         deadline: editDeadline
-      });
+      };
+      const trimmed = editBaselinePct.trim();
+      if (trimmed === '') {
+        if (baselineExistedBeforeEdit) payload.clear_baseline = true;
+      } else {
+        payload.baseline_pct = Number(trimmed);
+      }
+      await api.patch(`/big-tasks/${activeBt.id}`, payload);
       editingBigTask = false;
       await load({ silent: true });
     } catch (e) {
@@ -453,6 +478,23 @@
                 <input class="inline-input" type="date" bind:value={editDeadline} required />
               </label>
             </div>
+          </div>
+          <div class="panel-field">
+            <label class="small muted" for="bt-edit-baseline">Persentase awal (opsional)</label>
+            <input
+              id="bt-edit-baseline"
+              class="inline-input"
+              type="number"
+              min="0"
+              max="100"
+              placeholder="mis. 40"
+              bind:value={editBaselinePct}
+            />
+            <span class="small muted">
+              Progress yang sudah berjalan di lapangan sebelum dicatat di sistem (mis. migrasi data ke
+              staging) — dihitung sebagai Daily Task "Baseline Awal" terpisah, tidak mengubah Daily Task
+              lain. Kosongkan untuk menghapus baseline.
+            </span>
           </div>
           {#if bigTaskEditError}<p class="small" style="color:var(--win-red);margin:0">{bigTaskEditError}</p>{/if}
           <div class="inline-form-actions" style="padding-top:4px">

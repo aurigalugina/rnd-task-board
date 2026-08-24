@@ -3,11 +3,13 @@ package bigtask
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"rndops/backend/internal/auth"
@@ -488,13 +490,80 @@ type updateBigTaskRequest struct {
 	Name      *string `json:"name"`
 	StartDate *string `json:"start_date"`
 	Deadline  *string `json:"deadline"`
+	// BaselinePct/ClearBaseline: "Baseline Awal" -- input persentase progress
+	// yang sudah berjalan di lapangan sebelum Big Task ini dicatat di sistem
+	// (mis. migrasi data ke staging). super_user only, lihat
+	// decision-log-bigtask-baseline-progress-20260824.md. Dua field terpisah
+	// (bukan cuma *int nil-able) karena JSON tidak bisa membedakan "field
+	// absen" dari "field di-null-kan" lewat satu pointer saja -- frontend
+	// WAJIB kirim clear_baseline:true eksplisit untuk menghapus baseline.
+	BaselinePct   *int `json:"baseline_pct"`
+	ClearBaseline bool `json:"clear_baseline"`
+}
+
+// upsertBaseline membuat/mengupdate Daily Task khusus "Baseline Awal" (satu
+// per Big Task, ditandai is_baseline) + satu day_entries di start_date Big
+// Task itu dengan progress_pct = pct. Edit ulang (pct baru) meng-UPDATE
+// day_entries yang sudah ada, TIDAK insert baris baru -- mencegah history
+// menumpuk/AVG tercampur ganda. Daily Task/day_entries LAIN yang sudah ada
+// (real, bukan baseline) tidak pernah disentuh oleh fungsi ini. Lihat
+// decision-log-bigtask-baseline-progress-20260824.md.
+func upsertBaseline(ctx context.Context, tx pgx.Tx, bigTaskID string, pct int) error {
+	var picID string
+	var startDate time.Time
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(
+			bt.default_pic_user_id,
+			(SELECT user_id FROM big_task_members WHERE big_task_id = bt.id ORDER BY user_id LIMIT 1)
+		), bt.start_date
+		FROM big_tasks bt WHERE bt.id = $1
+	`, bigTaskID).Scan(&picID, &startDate)
+	if err != nil {
+		return err
+	}
+	dateStr := startDate.Format("2006-01-02")
+
+	var dailyTaskID string
+	err = tx.QueryRow(ctx, `
+		SELECT id FROM daily_tasks WHERE big_task_id = $1 AND is_baseline
+	`, bigTaskID).Scan(&dailyTaskID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		dailyTaskID = uuid.New().String()
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO daily_tasks (id, big_task_id, title, pic_user_id, start_date, end_date, is_baseline)
+			VALUES ($1, $2, 'Baseline Awal', $3, $4, $4, true)
+		`, dailyTaskID, bigTaskID, picID, dateStr); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO day_entries (id, daily_task_id, entry_date, progress_pct)
+			VALUES ($1, $2, $3, $4)
+		`, uuid.New().String(), dailyTaskID, dateStr, pct)
+		return err
+	} else if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE day_entries SET progress_pct = $2, updated_at = now() WHERE daily_task_id = $1
+	`, dailyTaskID, pct)
+	return err
+}
+
+// deleteBaseline menghapus Daily Task+day_entries "Baseline Awal" Big Task ini
+// (kalau ada) -- dipanggil saat field baseline dikosongkan lagi di form edit.
+func deleteBaseline(ctx context.Context, tx pgx.Tx, bigTaskID string) error {
+	_, err := tx.Exec(ctx, `DELETE FROM daily_tasks WHERE big_task_id = $1 AND is_baseline`, bigTaskID)
+	return err
 }
 
 // Update mengimplementasikan PATCH /big-tasks/{big_task_id} -- super_user only,
-// partial update (name/start_date/deadline). Dipakai a.l. buat koreksi data
-// biasa, dan sebagai salah satu jalur remediasi verdict backfill (geser
-// deadline sebelum sign-off) -- lihat
-// decision-log-verdict-backfill-signoff-20260820.md. on_hold TETAP lewat
+// partial update (name/start_date/deadline/baseline_pct). Dipakai a.l. buat
+// koreksi data biasa, sebagai salah satu jalur remediasi verdict backfill
+// (geser deadline sebelum sign-off) -- lihat
+// decision-log-verdict-backfill-signoff-20260820.md -- dan buat set/adjust
+// "Baseline Awal" progress migrasi data -- lihat
+// decision-log-bigtask-baseline-progress-20260824.md. on_hold TETAP lewat
 // endpoint terpisah yang sudah ada (ToggleOnHold), gak masuk sini.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if !auth.IsSuperUser(r.Context()) {
@@ -508,13 +577,29 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.Name == nil && req.StartDate == nil && req.Deadline == nil {
+	if req.Name == nil && req.StartDate == nil && req.Deadline == nil && req.BaselinePct == nil && !req.ClearBaseline {
 		http.Error(w, "tidak ada field yang diubah", http.StatusBadRequest)
+		return
+	}
+	if req.BaselinePct != nil && (*req.BaselinePct < 0 || *req.BaselinePct > 100) {
+		http.Error(w, "baseline_pct harus 0-100", http.StatusBadRequest)
+		return
+	}
+	if req.BaselinePct != nil && req.ClearBaseline {
+		http.Error(w, "baseline_pct dan clear_baseline tidak bisa dipakai bersamaan", http.StatusBadRequest)
 		return
 	}
 
 	userID := auth.UserIDFromContext(r.Context())
-	_, err := h.db.Exec(r.Context(), `
+
+	tx, err := h.db.Begin(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	if _, err := tx.Exec(r.Context(), `
 		UPDATE big_tasks SET
 			name = COALESCE($2, name),
 			start_date = COALESCE($3, start_date),
@@ -522,8 +607,24 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			updated_by = $5,
 			updated_at = now()
 		WHERE id = $1
-	`, bigTaskID, req.Name, req.StartDate, req.Deadline, userID)
-	if err != nil {
+	`, bigTaskID, req.Name, req.StartDate, req.Deadline, userID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if req.BaselinePct != nil {
+		if err := upsertBaseline(r.Context(), tx, bigTaskID, *req.BaselinePct); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else if req.ClearBaseline {
+		if err := deleteBaseline(r.Context(), tx, bigTaskID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
