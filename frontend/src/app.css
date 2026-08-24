@@ -540,6 +540,16 @@ a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
    sempit, bukan modal-nya yang melebar sampai ketutup layar. */
 .modal-box-user-mgmt { width: 820px; }
 .modal-box-master { width: 560px; }
+.modal-box-chatauth { width: 620px; }
+
+/* Output mentah `claude setup-token` (Settings > Login Claude, super_user) --
+   monospace, wrap (URL/instruksi login bisa panjang), auto-scroll ke bawah
+   di-drive dari script (lihat scrollAuthOutputToBottom). */
+.setup-token-log {
+  background: #0b0b12; color: #d8dce2; font-family: 'Courier New', monospace; font-size: 11px;
+  padding: 8px; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  border: 1px solid #C3C8CC;
+}
 .ref-section { display: flex; flex-direction: column; gap: 4px; }
 .ref-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--face); }
 .ref-add-row { border-bottom: none; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--face); }

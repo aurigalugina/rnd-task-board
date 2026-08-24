@@ -20,6 +20,7 @@ import (
 const (
 	chatPrefix      = "/api/v1/chat"
 	localConfigPath = chatPrefix + "/local/config"
+	setupTokenPath  = chatPrefix + "/auth/setup-token"
 )
 
 type Handler struct {
@@ -72,6 +73,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Provisioning ulang token OAuth Claude (akun subscription BERSAMA, dipakai
+	// semua sesi chat) -- operasi sensitif level infra, bukan sekadar aksi tim
+	// biasa. Digate super_user DI SINI (bukan di service, yang sengaja
+	// no-auth/full-trust -- lihat catatan "TIDAK ADA RBAC" di CLAUDE.md),
+	// supaya endpoint ini gak bisa dipanggil user manapun cuma karena punya
+	// access token valid (service sendiri gak pernah di-reach langsung dari
+	// browser, jadi ini satu-satunya titik enforcement).
+	if isSetupTokenPath(r.URL.Path) && claims.AccessLevel != "super_user" {
+		writeJSONError(w, http.StatusForbidden, "hanya super_user yang boleh provisioning ulang login Claude")
+		return
+	}
+
 	// Jangan bocorkan access_token ke service via query string.
 	if q := r.URL.Query(); q.Get("access_token") != "" {
 		q.Del("access_token")
@@ -96,6 +109,13 @@ func rewriteChatPath(p string) string {
 		return "/" + stripped
 	}
 	return stripped
+}
+
+// isSetupTokenPath cocokin path setup-token beserta sub-route-nya
+// (.../auth/setup-token/{sessionId}/input, buat kirim balik authorization
+// code) -- exact match ATAU prefix diikuti "/".
+func isSetupTokenPath(p string) bool {
+	return p == setupTokenPath || strings.HasPrefix(p, setupTokenPath+"/")
 }
 
 // tokenFromRequest mengambil access token dari header Authorization (REST) atau

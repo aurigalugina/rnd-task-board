@@ -155,13 +155,16 @@ Tutup session: abort `Query` SDK, close `AsyncQueue` input, hapus dari memori. W
 
 ### `POST /auth/setup-token`
 
-**SSE endpoint** — provisioning token OAuth Claude subscription (~1x/tahun, bukan per chat session). Spawn `claude setup-token` via PTY, stream stdout ke client supaya admin bisa lihat URL login dan approve manual di browser.
+**SSE endpoint** — provisioning token OAuth Claude subscription (~1x/tahun, bukan per chat session). Spawn `claude setup-token` via PTY, stream stdout ke client supaya admin bisa lihat URL login dan approve manual di browser. **2026-08-21:** sesi PTY-nya keyed by `session_id` (dikirim sebagai event pertama) dan disimpan in-memory (`activeSetupSessions` di `routes/auth.ts`) selama proses masih jalan — dipasangkan sama `POST /auth/setup-token/{session_id}/input` di bawah buat kirim authorization code balik (environment headless/SSH biasanya minta approve browser DIIKUTI paste code manual ke terminal, bukan auto-detect via local callback).
 
 Response `Content-Type: text/event-stream`.
 
 **Events**
 
 ```
+event: session
+data: {"session_id": "b3f1..."}
+
 event: output
 data: {"chunk": "Opening browser for authentication...\nhttps://claude.ai/..."}
 
@@ -174,7 +177,19 @@ event: done
 data: {"success": false, "reason": "timeout atau parsing token gagal"}
 ```
 
+Client disconnect (SSE ditutup dari sisi caller, mis. tombol "Batalkan") otomatis `kill()` proses PTY dan hapus sesi dari `activeSetupSessions` (lihat `req.on("close", ...)`).
+
 > **Belum divalidasi terhadap output CLI asli** — `extractToken()` di `src/auth/setupTokenBridge.ts` perlu diverifikasi/disesuaikan pas dites langsung pertama kali (baca komentar di sana).
+
+---
+
+### `POST /auth/setup-token/{session_id}/input`
+
+Kirim satu baris input (biasanya authorization code hasil approve browser) ke proses `claude setup-token` yang lagi jalan dan ditunjuk oleh `session_id` (didapat dari event `session` di atas). Enter/newline ditambahkan otomatis kalau caller belum menyertakannya.
+
+**Request body**: `{ "input": "string" }`
+
+**Response**: `204` kalau berhasil dikirim; `404` kalau `session_id` tidak ditemukan (sesi sudah selesai/timeout/salah id); `400` kalau `input` kosong.
 
 ---
 

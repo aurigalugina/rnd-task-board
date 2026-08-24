@@ -1,12 +1,15 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import { api } from '$lib/api/client';
   import { auth } from '$lib/stores/authStore';
   import { theme, THEMES } from '$lib/stores/themeStore';
   import type { AccessLevel, ManagedUser, NotificationSettings, ReferensiTim, ReferensiUserHR, Role } from '$lib/types';
-  import { X, Bot, Smartphone, Settings as SettingsIcon, CircleCheck, CircleX, Clock, Check } from 'lucide-svelte';
+  import { setupTokenApi, streamSetupToken, type AuthStatus } from '$lib/setupTokenClient';
+  import { X, Bot, Smartphone, Settings as SettingsIcon, CircleCheck, CircleX, Clock, Check, KeyRound } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher<{ close: void }>();
+
+  $: isSuperUser = $auth.user?.access_level === 'super_user';
 
   $: canManage = $auth.user?.roles.some((r) => r === 'admin' || r === 'spv') ?? false;
 
@@ -17,7 +20,7 @@
   // (ketemu 2026-08-10 saat verifikasi visual fitur mapping HR). Template di
   // bawah sudah double-check `canManage` sendiri (`activeTab === 'users' &&
   // canManage`), jadi default polos di sini aman.
-  let activeTab: 'users' | 'master' | 'notif' | 'theme' = 'users';
+  let activeTab: 'users' | 'master' | 'notif' | 'chatauth' | 'theme' = 'users';
 
   let users: ManagedUser[] = [];
   let roles: Role[] = [];
@@ -306,6 +309,88 @@
 
   $: if (activeTab === 'notif') loadNotifTab();
 
+  // --- Login Claude (claude-chat-service, super_user only) ---
+  // Provisioning ulang token OAuth akun Claude subscription BERSAMA (dipakai
+  // semua sesi Change Request chat) -- sebelumnya cuma bisa lewat curl manual
+  // ke claude-chat-service langsung di server. Sekarang di-handle service itu
+  // sendiri (endpoint POST /auth/setup-token, SSE) dan dipicu dari sini lewat
+  // backend proxy (digate super_user di chatproxy Go, lihat CLAUDE.md
+  // "Login OAuth Claude di-handle service sendiri", 2026-08-21).
+  let authStatus: AuthStatus | null = null;
+  let authStatusLoading = false;
+  let authStreaming = false;
+  let authSessionId: string | null = null;
+  let authOutput = '';
+  let authDone: { success: true; capturedAt: string } | { success: false; reason: string } | null = null;
+  let authStreamError: string | null = null;
+  let authAbort: AbortController | null = null;
+  let authInputValue = '';
+  let authSendingInput = false;
+  let authOutputBox: HTMLElement | undefined;
+
+  async function loadAuthStatus() {
+    authStatusLoading = true;
+    try {
+      authStatus = await setupTokenApi.status();
+    } catch (e) {
+      authStatus = null;
+      authStreamError = (e as Error).message;
+    } finally {
+      authStatusLoading = false;
+    }
+  }
+
+  $: if (activeTab === 'chatauth' && isSuperUser) loadAuthStatus();
+
+  async function scrollAuthOutputToBottom() {
+    await tick();
+    authOutputBox?.scrollTo(0, authOutputBox.scrollHeight);
+  }
+
+  async function startClaudeLogin() {
+    authOutput = '';
+    authSessionId = null;
+    authDone = null;
+    authStreamError = null;
+    authStreaming = true;
+    authAbort = new AbortController();
+    try {
+      await streamSetupToken(async (evt) => {
+        if (evt.type === 'session') {
+          authSessionId = evt.sessionId;
+        } else if (evt.type === 'output') {
+          authOutput += evt.chunk;
+          await scrollAuthOutputToBottom();
+        } else if (evt.type === 'done') {
+          authDone = evt;
+          if (evt.success) await loadAuthStatus();
+        }
+      }, authAbort.signal);
+    } catch (e) {
+      authStreamError = (e as Error).message;
+    } finally {
+      authStreaming = false;
+      authSessionId = null; // proses PTY sudah exit (sukses/gagal/dibatalkan) -- gak bisa nerima input lagi
+    }
+  }
+
+  function cancelClaudeLogin() {
+    authAbort?.abort();
+  }
+
+  async function sendClaudeLoginInput() {
+    if (!authSessionId || !authInputValue.trim()) return;
+    authSendingInput = true;
+    try {
+      await setupTokenApi.sendInput(authSessionId, authInputValue);
+      authInputValue = '';
+    } catch (e) {
+      authStreamError = (e as Error).message;
+    } finally {
+      authSendingInput = false;
+    }
+  }
+
   let themeSaving = false;
   async function pickTheme(key: (typeof THEMES)[number]['key']) {
     theme.set(key);
@@ -330,6 +415,7 @@
     class="modal-box modal-box-wide"
     class:modal-box-user-mgmt={activeTab === 'users' && canManage}
     class:modal-box-master={activeTab === 'master' && canManage}
+    class:modal-box-chatauth={activeTab === 'chatauth' && isSuperUser}
     role="dialog"
     aria-modal="true"
     aria-label="Settings"
@@ -351,6 +437,11 @@
       <button class="role-filter-pill {activeTab === 'notif' ? 'role-filter-pill-active' : ''}" on:click={() => (activeTab = 'notif')}>
         Notifikasi
       </button>
+      {#if isSuperUser}
+        <button class="role-filter-pill {activeTab === 'chatauth' ? 'role-filter-pill-active' : ''}" on:click={() => (activeTab = 'chatauth')}>
+          Login Claude
+        </button>
+      {/if}
       <button class="role-filter-pill {activeTab === 'theme' ? 'role-filter-pill-active' : ''}" on:click={() => (activeTab = 'theme')}>
         Tema aplikasi
       </button>
@@ -595,6 +686,74 @@
             {notifSaving ? 'Menyimpan...' : notifSaved ? 'Tersimpan' : 'Simpan pengaturan notifikasi'}
           </button>
         {/if}
+      {:else if activeTab === 'chatauth' && isSuperUser}
+        <div class="ref-section">
+          <div class="section-title"><KeyRound size={13} />&nbsp;Login Claude (claude-chat-service)</div>
+          <p class="small muted" style="margin:0">
+            Akun Claude subscription BERSAMA yang dipakai semua sesi Change Request chat. Token OAuth-nya berumur
+            panjang (~1 tahun), tapi kalau service melapor "OAuth access token has expired", provisioning ulang di sini —
+            gak perlu SSH/curl manual ke server lagi.
+          </p>
+
+          {#if authStatusLoading}
+            <p class="small muted">Memuat status...</p>
+          {:else if authStatus}
+            <div class="ref-row">
+              {#if authStatus.loggedIn}
+                <CircleCheck size={13} style="color:var(--win-green);flex-shrink:0" />
+                <span class="small">Login aktif</span>
+              {:else}
+                <CircleX size={13} style="color:var(--win-red);flex-shrink:0" />
+                <span class="small">Belum/tidak login{authStatus.error ? ` — ${authStatus.error}` : ''}</span>
+              {/if}
+            </div>
+            {#if authStatus.tokenProvisioning.present}
+              <p class="small muted" style="margin:0">
+                Terakhir di-provisioning: <span class="mono">{authStatus.tokenProvisioning.capturedAt}</span>
+              </p>
+            {/if}
+          {/if}
+
+          {#if !authStreaming}
+            <button class="quick-btn quick-btn-done" on:click={startClaudeLogin} style="align-self:flex-start">
+              {authDone ? 'Login ulang' : 'Mulai login'}
+            </button>
+          {/if}
+
+          {#if authStreaming || authOutput}
+            <div class="setup-token-log" bind:this={authOutputBox}>{authOutput || 'Menunggu output...'}</div>
+          {/if}
+
+          {#if authStreaming}
+            {#if authSessionId}
+              <div class="ref-row">
+                <input
+                  class="inline-input mono"
+                  style="flex:1"
+                  placeholder="Paste authorization code di sini kalau diminta, lalu Enter"
+                  bind:value={authInputValue}
+                  on:keydown={(e) => e.key === 'Enter' && sendClaudeLoginInput()}
+                  disabled={authSendingInput}
+                />
+                <button class="quick-btn" on:click={sendClaudeLoginInput} disabled={authSendingInput || !authInputValue.trim()}>
+                  Kirim
+                </button>
+              </div>
+            {/if}
+            <button class="quick-btn quick-btn-danger" on:click={cancelClaudeLogin} style="align-self:flex-start">
+              Batalkan
+            </button>
+          {/if}
+
+          {#if authDone}
+            {#if authDone.success}
+              <p class="small" style="color:var(--win-green);margin:0">Login berhasil, token tersimpan.</p>
+            {:else}
+              <p class="small" style="color:var(--win-red);margin:0">Gagal: {authDone.reason}</p>
+            {/if}
+          {/if}
+          {#if authStreamError}<p class="small" style="color:var(--win-red);margin:0">{authStreamError}</p>{/if}
+        </div>
       {:else}
         <div class="theme-grid">
           {#each THEMES as opt (opt.key)}

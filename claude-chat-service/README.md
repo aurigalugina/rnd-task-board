@@ -44,10 +44,18 @@ tahun). Provisioning:
 curl -N -X POST http://localhost:8090/auth/setup-token
 ```
 
-Respons SSE — event `output` berisi chunk stdout mentah (termasuk
-URL/instruksi login OAuth, buka manual di browser & approve), event `done`
-menandakan selesai (`success: true` + `capturedAt`, token otomatis tersimpan
-ke `TOKEN_STORE_PATH` dan langsung dipakai sesi berikutnya).
+Respons SSE — event `session` (session_id, dikirim pertama), event `output`
+berisi chunk stdout mentah (termasuk URL/instruksi login OAuth, buka manual di
+browser & approve), event `done` menandakan selesai (`success: true` +
+`capturedAt`, token otomatis tersimpan ke `TOKEN_STORE_PATH` dan langsung
+dipakai sesi berikutnya). Kalau `claude setup-token` minta authorization code
+di-paste balik (environment headless/SSH tanpa local browser callback), kirim
+lewat `POST /auth/setup-token/{session_id}/input` (`{"input": "..."}`) di
+request terpisah selama SSE di atas masih streaming.
+
+**2026-08-21:** provisioning ulang ini sekarang juga bisa dipicu dari UI
+`rnd-task-board` (Settings → "Login Claude", super_user only) lewat backend
+proxy — gak perlu curl manual ke server lagi kecuali mau debug langsung.
 
 > **Belum divalidasi terhadap output CLI asli** (lihat catatan di
 > `src/auth/setupTokenBridge.ts`) — proses ini sengaja tidak dijalankan otomatis
@@ -70,6 +78,7 @@ metadata kapan token terakhir kita provision).
 | `GET /sessions/:id` | Detail satu session (termasuk akumulasi `totalCostUsd`). |
 | `DELETE /sessions/:id` | Tutup session (abort query, hapus dari memori). |
 | `POST /auth/setup-token` | SSE — provisioning token (lihat di atas). |
+| `POST /auth/setup-token/:sessionId/input` | Kirim input (authorization code) ke sesi setup-token yang lagi jalan. |
 | `GET /auth/status` | Status auth live. |
 
 `permissionMode`: `default` \| `acceptEdits` \| `bypassPermissions` \| `plan` \|

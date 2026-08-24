@@ -9,3 +9,4 @@ backend/rndops-api
 backend/tmp/
 myagenda-service/tmp/
 myagenda-service/myagenda-service
+claude-chat-service/src/auth/setupTokenBridge.ts
