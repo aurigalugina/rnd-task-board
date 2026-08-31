@@ -1623,3 +1623,27 @@ button svg, a svg { display: inline-block; vertical-align: middle; flex-shrink: 
 
 /* Big task create modal */
 .bigtask-create-modal { width: 460px; max-width: calc(100vw - 32px); }
+
+/* ========================================
+   TEMA 7: MINIMAL ZEN (Light Modern)
+   2026-08-31: Soft teal primary, warm white bg, premium feel
+   ======================================== */
+:root[data-theme='minimal-zen'] {
+  --face: #FAFAFA; --face-light: #FFFFFF; --content-bg: #FFFFFF; --content-alt: #F3F7F8;
+  --text-primary: #1a2332; --text-muted: #6b7c8c;
+  --titlebar-a: #4F7B8F; --titlebar-b: #6a9faf;
+  --titlebar-text: #FFFFFF; --titlebar-text-muted: #d4e1e8;
+  --win-blue: #4F7B8F; --win-blue-light: #e8f0f5; --win-green: #3e8a7a; --win-red: #c8604a; --win-amber: #a8926d;
+}
+
+/* ========================================
+   TEMA 8: BOLD & VIBRANT (Light Modern)
+   2026-08-31: Vibrant purple primary, energetic feel, playful
+   ======================================== */
+:root[data-theme='bold-vibrant'] {
+  --face: #FFFFFF; --face-light: #FFFFFF; --content-bg: #FFFFFF; --content-alt: #F7F4FE;
+  --text-primary: #0d1117; --text-muted: #57606a;
+  --titlebar-a: #7C3AED; --titlebar-b: #a855f7;
+  --titlebar-text: #FFFFFF; --titlebar-text-muted: rgba(255,255,255,.8);
+  --win-blue: #7C3AED; --win-blue-light: #f3e8ff; --win-green: #10b981; --win-red: #ef4444; --win-amber: #f59e0b;
+}
