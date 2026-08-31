@@ -1647,3 +1647,126 @@ button svg, a svg { display: inline-block; vertical-align: middle; flex-shrink: 
   --titlebar-text: #FFFFFF; --titlebar-text-muted: rgba(255,255,255,.8);
   --win-blue: #7C3AED; --win-blue-light: #f3e8ff; --win-green: #10b981; --win-red: #ef4444; --win-amber: #f59e0b;
 }
+
+/* ========================================
+   MODERN STARTUP DASHBOARD ENHANCEMENTS
+   2026-08-31: Animations, glassmorphism, interactive elements
+   ======================================== */
+
+/* Fade-in animation saat load */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Smooth scale hover */
+@keyframes scaleHover {
+  from { transform: scale(1); }
+  to { transform: scale(1.02); }
+}
+
+/* Pulse animation (untuk real-time indicator) */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Counter animation (count up) */
+@keyframes countUp {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Apply animations */
+.stat-card {
+  animation: fadeInUp 0.6s ease-out backwards;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+}
+
+.stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2) { animation-delay: 0.1s; }
+.stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4) { animation-delay: 0.2s; }
+.stat-card:nth-child(5) { animation-delay: 0.25s; }
+.stat-card:nth-child(6) { animation-delay: 0.3s; }
+.stat-card:nth-child(7) { animation-delay: 0.35s; }
+.stat-card:nth-child(8) { animation-delay: 0.4s; }
+
+.stat-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Chart sections */
+.section {
+  animation: fadeInUp 0.7s ease-out;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+/* Filter section - modern look */
+.dash-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--content-alt);
+  transition: all 0.3s ease;
+}
+
+.dash-filters:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Dashboard heading */
+.dash-heading {
+  margin-bottom: 24px;
+  padding: 20px 0;
+}
+
+.dash-heading-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.dash-heading .muted {
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+}
+
+/* Chart container animations */
+.chart-row {
+  animation: fadeInUp 0.8s ease-out;
+  display: flex;
+  gap: 16px;
+}
+
+/* Stat value counter effect */
+.stat-value {
+  animation: countUp 0.8s ease-out;
+  font-variant-numeric: tabular-nums;
+}
