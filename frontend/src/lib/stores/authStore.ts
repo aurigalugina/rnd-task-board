@@ -59,13 +59,16 @@ async function init() {
 }
 
 async function login(email: string, password: string) {
+  console.log('[auth] Attempting login with email:', email);
   const res = await api.post<{ access_token: string; user: UserSummary }>('/auth/login', {
     email,
     password
   });
+  console.log('[auth] Login response received:', { hasToken: !!res.access_token, user: res.user?.display_name });
   setAccessToken(res.access_token);
   cacheUser(res.user);
   set({ status: 'authenticated', user: res.user });
+  console.log('[auth] Login complete, store updated');
 }
 
 async function logout() {

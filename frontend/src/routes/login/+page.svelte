@@ -11,10 +11,14 @@
     error = null;
     submitting = true;
     try {
+      console.log('[login-page] Form submitted with email:', email);
       await auth.login(email, password);
+      console.log('[login-page] Login successful, redirecting...');
       await goto('/');
     } catch (e) {
-      error = (e as Error).message;
+      const errMsg = (e as Error).message;
+      console.error('[login-page] Login failed:', errMsg, e);
+      error = errMsg;
     } finally {
       submitting = false;
     }
