@@ -55,8 +55,30 @@ type DailyTask struct {
 }
 
 // ListByBigTask mengimplementasikan GET /big-tasks/{big_task_id}/daily-tasks.
+// Permission check: user harus super_user, atau scope='team', atau (scope='self' AND member dari big task ini).
 func (h *Handler) ListByBigTask(w http.ResponseWriter, r *http.Request) {
 	bigTaskID := chi.URLParam(r, "bigTaskID")
+	userID := auth.UserIDFromContext(r.Context())
+
+	// Permission check: if not super_user, cek task_scope_visibility
+	if !auth.IsSuperUser(r.Context()) {
+		var userScope string
+		var isMember bool
+		err := h.db.QueryRow(r.Context(), `
+			SELECT u.task_scope_visibility,
+			       EXISTS(SELECT 1 FROM big_task_members WHERE big_task_id = $1 AND user_id = $2)
+			FROM users u WHERE u.id = $2
+		`, bigTaskID, userID).Scan(&userScope, &isMember)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Kalau scope='self', user hanya boleh akses kalau dia member Big Task itu
+		if userScope == "self" && !isMember {
+			http.Error(w, "tidak punya akses ke daily task ini", http.StatusForbidden)
+			return
+		}
+	}
 
 	rows, err := h.db.Query(r.Context(), `
 		SELECT id, big_task_id, title, pic_user_id, start_date, end_date, is_baseline

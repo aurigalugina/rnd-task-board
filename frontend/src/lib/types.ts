@@ -99,6 +99,7 @@ export type ManagedUser = AssignableUser & {
   email: string;
   access_level: AccessLevel;
   hr_user_id: number | null;
+  task_scope_visibility?: 'self' | 'team'; // 2026-08-31
 };
 
 export type Role = {

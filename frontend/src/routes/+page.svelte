@@ -30,6 +30,8 @@
   let categoryFilter: '' | BoardCategory = '';
   let teamFilter = ''; // super_user only
   let userFilter = ''; // regular: '' | id sendiri (toggle Saya/Semua); super_user: '' | id siapa pun
+  let sortBy: 'progress' | 'duedate' | '' = ''; // 2026-08-31: sorting boards
+  let sortOrder: 'asc' | 'desc' = 'asc';
 
   // Dashboard mengagregasi LINTAS SEMUA board di client — tidak ada endpoint
   // backend baru buat ini, cukup fetch big-tasks tiap board lalu digabung.
@@ -42,6 +44,8 @@
       const params = new URLSearchParams();
       if (categoryFilter) params.set('category', categoryFilter);
       if (isSuperUser && teamFilter) params.set('team_id', teamFilter);
+      if (sortBy) params.set('sort_by', sortBy);
+      if (sortOrder && sortBy) params.set('sort_order', sortOrder);
       const qs = params.toString();
       const [boards, users, summaries] = await Promise.all([
         api.get<Board[]>(`/boards${qs ? '?' + qs : ''}`),
@@ -125,6 +129,19 @@
     <option value="project">Project</option>
     <option value="routine">Routine</option>
   </select>
+
+  <select class="inline-input" style="width:auto" bind:value={sortBy} on:change={loadDashboard}>
+    <option value="">Urutkan default</option>
+    <option value="progress">Progress</option>
+    <option value="duedate">Deadline</option>
+  </select>
+
+  {#if sortBy}
+    <select class="inline-input" style="width:auto" bind:value={sortOrder} on:change={loadDashboard}>
+      <option value="asc">Rendah → Tinggi</option>
+      <option value="desc">Tinggi → Rendah</option>
+    </select>
+  {/if}
 
   {#if isSuperUser}
     <select class="inline-input" style="width:auto" bind:value={teamFilter} on:change={loadDashboard}>

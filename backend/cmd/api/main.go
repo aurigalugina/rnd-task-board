@@ -147,6 +147,9 @@ func main() {
 			// beda axis dari roles, pola sama seperti board archive/weekly-plan team-status).
 			// Lihat decision-log-verdict-backfill-signoff-20260820.md.
 			protected.Patch("/big-tasks/{bigTaskID}", bigTaskHandler.Update)
+			// Delete Big Task (soft delete, super_user only) -- cek in-handler, cascade
+			// visibility filter untuk child records (daily_tasks, comments, dst).
+			protected.Delete("/big-tasks/{bigTaskID}", bigTaskHandler.Delete)
 
 			protected.Group(func(spvOnly chi.Router) {
 				spvOnly.Use(auth.RequireRole("spv"))

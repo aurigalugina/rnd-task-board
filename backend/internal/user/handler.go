@@ -228,11 +228,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateUserRequest struct {
-	OrgTeam     *string  `json:"org_team"`
-	AccessLevel *string  `json:"access_level"`
-	HRUserID    *int     `json:"hr_user_id"`
-	ClearHR     bool     `json:"clear_hr_user_id"`
-	RoleCodes   []string `json:"role_codes"`
+	OrgTeam              *string  `json:"org_team"`
+	AccessLevel          *string  `json:"access_level"`
+	HRUserID             *int     `json:"hr_user_id"`
+	ClearHR              bool     `json:"clear_hr_user_id"`
+	RoleCodes            []string `json:"role_codes"`
+	TaskScopeVisibility  *string  `json:"task_scope_visibility"` // 2026-08-31: 'self' or 'team'
 }
 
 // Update mengimplementasikan PATCH /users/{id} (otorisasi: admin/spv) — SEBELUM
@@ -252,6 +253,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AccessLevel != nil && !validAccessLevel(*req.AccessLevel) {
 		http.Error(w, "access_level harus salah satu dari: super_user, regular_user", http.StatusBadRequest)
+		return
+	}
+	if req.TaskScopeVisibility != nil && *req.TaskScopeVisibility != "self" && *req.TaskScopeVisibility != "team" {
+		http.Error(w, "task_scope_visibility harus salah satu dari: self, team", http.StatusBadRequest)
 		return
 	}
 	if req.OrgTeam != nil {
@@ -281,10 +286,11 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		UPDATE users SET
 			org_team = COALESCE($2, org_team),
 			access_level = COALESCE($3, access_level),
+			task_scope_visibility = COALESCE($6, task_scope_visibility),
 			hr_user_id = CASE WHEN $4 THEN NULL ELSE COALESCE($5, hr_user_id) END,
 			updated_at = now()
 		WHERE id = $1
-	`, targetID, req.OrgTeam, req.AccessLevel, req.ClearHR, hrUserID)
+	`, targetID, req.OrgTeam, req.AccessLevel, req.ClearHR, hrUserID, req.TaskScopeVisibility)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

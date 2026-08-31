@@ -114,7 +114,7 @@ func (h *Handler) ListByBoard(w http.ResponseWriter, r *http.Request) {
 			FROM big_task_members
 			GROUP BY big_task_id
 		) mem ON mem.big_task_id = bt.id
-		WHERE bt.board_id = $1
+		WHERE bt.board_id = $1 AND bt.deleted_at IS NULL
 		ORDER BY bt.created_at
 	`, boardID)
 	if err != nil {
@@ -192,7 +192,7 @@ func loadBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID string) (BigTa
 			FROM big_task_members
 			GROUP BY big_task_id
 		) mem ON mem.big_task_id = bt.id
-		WHERE bt.id = $1
+		WHERE bt.id = $1 AND bt.deleted_at IS NULL
 	`, bigTaskID).Scan(&bt.ID, &bt.BoardID, &bt.Name, &startDate, &deadline,
 		&bt.DefaultPicUserID, &bt.OnHold, &bt.ActualPct, &signedBy, &signedAt,
 		&bt.SignedAtBackdatedBy, &bt.UpdatedBy, &bt.MemberUserIDs)
@@ -666,6 +666,30 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UndoSignOff(w http.ResponseWriter, r *http.Request) {
 	bigTaskID := chi.URLParam(r, "bigTaskID")
 	_, err := h.db.Exec(r.Context(), `DELETE FROM big_task_signoffs WHERE big_task_id = $1`, bigTaskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Delete mengimplementasikan DELETE /big-tasks/{big_task_id} (soft delete, super_user only).
+// Menandai Big Task sebagai "deleted" tanpa menghapus row fisik dari database.
+// Child records (daily_tasks, comments, day_entries, dst) tetap ada, tetapi tidak
+// ditampilkan di layer aplikasi karena query-nya mengecek deleted_at IS NULL.
+// Safety pattern: mencegah data loss accidental sambil tetap maintaining referential integrity.
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	if !auth.IsSuperUser(r.Context()) {
+		http.Error(w, "cuma super_user yang bisa delete big task", http.StatusForbidden)
+		return
+	}
+	bigTaskID := chi.URLParam(r, "bigTaskID")
+	userID := auth.UserIDFromContext(r.Context())
+
+	_, err := h.db.Exec(r.Context(), `
+		UPDATE big_tasks SET deleted_at = now(), deleted_by = $2, updated_at = now()
+		WHERE id = $1
+	`, bigTaskID, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

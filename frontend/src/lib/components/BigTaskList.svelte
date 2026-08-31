@@ -10,7 +10,7 @@
   import DailyTaskPanel from './DailyTaskPanel.svelte';
   import CommentModal from './CommentModal.svelte';
   import CheatSheetSection from './CheatSheetSection.svelte';
-  import { Check, CirclePause, CirclePlay, Pencil, X } from 'lucide-svelte';
+  import { Check, CirclePause, CirclePlay, Pencil, X, Trash2 } from 'lucide-svelte';
 
   export let boardId: string;
 
@@ -124,6 +124,30 @@
       bigTaskEditError = (e as Error).message;
     } finally {
       savingBigTaskEdit = false;
+    }
+  }
+
+  let deletingBigTask = false;
+
+  async function deleteBigTask() {
+    if (!activeBt) return;
+    if (!isSuperUser) {
+      bigTaskEditError = 'Cuma super user yang bisa delete big task';
+      return;
+    }
+    if (!confirm(`Hapus Big Task "${activeBt.name}"? Data tidak bisa dikembalikan.`)) return;
+
+    deletingBigTask = true;
+    bigTaskEditError = '';
+    try {
+      await api.del(`/big-tasks/${activeBt.id}`);
+      editingBigTask = false;
+      selectedBtId = null;
+      await load({ silent: true });
+    } catch (e) {
+      bigTaskEditError = (e as Error).message;
+    } finally {
+      deletingBigTask = false;
     }
   }
 
@@ -540,6 +564,17 @@
               {savingBigTaskEdit ? 'Menyimpan...' : 'Simpan perubahan'}
             </button>
             <button class="quick-btn" type="button" on:click={() => (editingBigTask = false)}>Batal</button>
+            {#if isSuperUser}
+              <button
+                class="quick-btn"
+                type="button"
+                style="color:var(--win-red);border-color:var(--win-red)"
+                disabled={deletingBigTask}
+                on:click={deleteBigTask}
+              >
+                <Trash2 size={12} />&nbsp;{deletingBigTask ? 'Menghapus...' : 'Hapus'}
+              </button>
+            {/if}
           </div>
         </form>
       </div>

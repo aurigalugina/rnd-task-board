@@ -3,6 +3,7 @@ package board
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -64,6 +65,10 @@ func scanBoard(row interface{ Scan(dest ...any) error }) (Board, error) {
 // mempersempit ke 1 tim, atau kosongkan buat lihat semua tim. Level proteksi
 // = filter query, BUKAN lockdown endpoint turunan (mis. /big-tasks) -- MVP
 // trust-based, lihat decision log.
+//
+// Sorting (2026-08-31): query ?sort_by=(progress|duedate) &sort_order=(asc|desc).
+// Default: created_at (asc). Progress = average actual_pct dari Big Tasks board itu,
+// duedate = earliest deadline dari Big Tasks. Lihat decision-log-boards-sorting-20260831.md.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	var category *string
 	if c := r.URL.Query().Get("category"); c != "" {
@@ -74,6 +79,53 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		category = &c
 	}
 
+	// Sorting parameters
+	sortBy := r.URL.Query().Get("sort_by")   // progress, duedate, atau kosong (default created_at)
+	sortOrder := r.URL.Query().Get("sort_order") // asc, desc, atau kosong (default asc)
+	
+	// Validasi sort_by
+	if sortBy != "" && sortBy != "progress" && sortBy != "duedate" {
+		http.Error(w, "sort_by harus salah satu dari: progress, duedate", http.StatusBadRequest)
+		return
+	}
+	// Validasi sort_order
+	if sortOrder != "" && sortOrder != "asc" && sortOrder != "desc" {
+		http.Error(w, "sort_order harus salah satu dari: asc, desc", http.StatusBadRequest)
+		return
+	}
+	if sortOrder == "" {
+		sortOrder = "asc"
+	}
+
+	// Build ORDER BY clause
+	orderByClause := "b.created_at ASC"
+	if sortBy == "progress" {
+		orderByClause = fmt.Sprintf("COALESCE(stats.avg_progress, 0) %s, b.created_at ASC", sortOrder)
+	} else if sortBy == "duedate" {
+		orderByClause = fmt.Sprintf("COALESCE(stats.earliest_deadline, CURRENT_DATE) %s, b.created_at ASC", sortOrder)
+	}
+
+	// Stats subquery: hitung average progress dan earliest deadline per board
+	const statsSubquery = `
+	LEFT JOIN (
+		SELECT bt.board_id,
+		       ROUND(AVG(COALESCE(agg.pct, 0))) AS avg_progress,
+		       MIN(bt.deadline) AS earliest_deadline
+		FROM big_tasks bt
+		LEFT JOIN (
+			SELECT dt.big_task_id, ROUND(AVG(sub.pct)) AS pct
+			FROM daily_tasks dt
+			JOIN (
+				SELECT daily_task_id, AVG(progress_pct) AS pct
+				FROM day_entries GROUP BY daily_task_id
+			) sub ON sub.daily_task_id = dt.id
+			GROUP BY dt.big_task_id
+		) agg ON agg.big_task_id = bt.id
+		WHERE bt.deleted_at IS NULL
+		GROUP BY bt.board_id
+	) stats ON stats.board_id = b.id
+	`
+
 	var rows pgx.Rows
 	var err error
 
@@ -82,33 +134,54 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		if t := r.URL.Query().Get("team_id"); t != "" {
 			teamID = &t
 		}
-		rows, err = h.db.Query(r.Context(), `
+		rows, err = h.db.Query(r.Context(), fmt.Sprintf(`
 			SELECT `+boardSelectColumns+`
 			FROM boards b
 			`+boardTeamsJoin+`
+			%s
 			WHERE b.archived_at IS NULL
 			  AND ($1::text IS NULL OR b.category = $1)
 			  AND ($2::uuid IS NULL OR EXISTS (
 			      SELECT 1 FROM board_teams x WHERE x.board_id = b.id AND x.team_id = $2
 			  ))
-			ORDER BY b.created_at
-		`, category, teamID)
+			ORDER BY %s
+		`, statsSubquery, orderByClause), category, teamID)
 	} else {
 		userID := auth.UserIDFromContext(r.Context())
-		rows, err = h.db.Query(r.Context(), `
+		// Check user's task_scope_visibility: if 'self', only show boards where user is Big Task member
+		rows, err = h.db.Query(r.Context(), fmt.Sprintf(`
+			WITH user_scope AS (
+				SELECT task_scope_visibility FROM users WHERE id = $2
+			),
+			scope_boards AS (
+				SELECT DISTINCT b.id
+				FROM boards b
+				%s
+				WHERE b.archived_at IS NULL
+				  AND ($1::text IS NULL OR b.category = $1)
+				  AND EXISTS (
+				      SELECT 1 FROM board_teams x
+				      JOIN referensi_tim rt ON rt.id = x.team_id
+				      JOIN users u ON u.org_team = rt.name
+				      WHERE x.board_id = b.id AND u.id = $2
+				  )
+				  AND (
+				      (SELECT task_scope_visibility FROM user_scope) = 'team'
+				      OR
+				      EXISTS (
+				          SELECT 1 FROM big_tasks bt
+				          JOIN big_task_members btm ON btm.big_task_id = bt.id
+				          WHERE bt.board_id = b.id AND btm.user_id = $2 AND bt.deleted_at IS NULL
+				      )
+				  )
+			)
 			SELECT `+boardSelectColumns+`
 			FROM boards b
 			`+boardTeamsJoin+`
-			WHERE b.archived_at IS NULL
-			  AND ($1::text IS NULL OR b.category = $1)
-			  AND EXISTS (
-			      SELECT 1 FROM board_teams x
-			      JOIN referensi_tim rt ON rt.id = x.team_id
-			      JOIN users u ON u.org_team = rt.name
-			      WHERE x.board_id = b.id AND u.id = $2
-			  )
-			ORDER BY b.created_at
-		`, category, userID)
+			%s
+			WHERE b.id IN (SELECT id FROM scope_boards)
+			ORDER BY %s
+		`, statsSubquery, orderByClause), category, userID)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

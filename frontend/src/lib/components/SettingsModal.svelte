@@ -207,6 +207,7 @@
   let editingUserId: string | null = null;
   let editOrgTeam = '';
   let editAccessLevel: AccessLevel = 'regular_user';
+  let editTaskScopeVisibility: 'self' | 'team' = 'team'; // 2026-08-31
   let editHrUserId = '';
   let editRoles: Record<string, boolean> = {};
   let savingEdit = false;
@@ -216,6 +217,7 @@
     editingUserId = u.id;
     editOrgTeam = u.org_team;
     editAccessLevel = u.access_level;
+    editTaskScopeVisibility = u.task_scope_visibility ?? 'team';
     editHrUserId = u.hr_user_id !== null ? String(u.hr_user_id) : '';
     editRoles = Object.fromEntries(roles.map((r) => [r.code, u.roles.includes(r.code)]));
     editError = null;
@@ -236,6 +238,7 @@
       await api.patch(`/users/${editingUserId}`, {
         org_team: editOrgTeam,
         access_level: editAccessLevel,
+        task_scope_visibility: editTaskScopeVisibility,
         hr_user_id: editHrUserId ? Number(editHrUserId) : null,
         clear_hr_user_id: !editHrUserId,
         role_codes: roleCodes
@@ -456,13 +459,13 @@
           <div class="modal-body-scroll-x">
           <table class="sheet-table">
             <thead>
-              <tr><th>Nama</th><th>Email</th><th>Role</th><th>Tim</th><th>Access</th><th>Mapping HR</th><th></th></tr>
+              <tr><th>Nama</th><th>Email</th><th>Role</th><th>Tim</th><th>Access</th><th>Scope</th><th>Mapping HR</th><th></th></tr>
             </thead>
             <tbody>
               {#each users as u (u.id)}
                 <tr>
                   {#if editingUserId === u.id}
-                    <td colspan="7">
+                    <td colspan="8">
                       <div class="inline-form" style="margin:0">
                         <strong class="small">{u.display_name} ({u.initials})</strong>
                         <select class="inline-input" bind:value={editOrgTeam}>
@@ -479,6 +482,10 @@
                           {#each usersHR as hr (hr.hr_user_id)}
                             <option value={hr.hr_user_id}>{hr.nama_lengkap} — {hr.email}</option>
                           {/each}
+                        </select>
+                        <select class="inline-input" bind:value={editTaskScopeVisibility}>
+                          <option value="team">Lihat semua task tim</option>
+                          <option value="self">Lihat hanya task sendiri</option>
                         </select>
                         <div class="role-filter-pills">
                           {#each roles as role (role.code)}
@@ -509,6 +516,7 @@
                         <span class="muted">regular_user</span>
                       {/if}
                     </td>
+                    <td class="small muted">{u.task_scope_visibility ?? 'team'}</td>
                     <td class="small muted">{hrLabel(u.hr_user_id)}</td>
                     <td><button class="quick-btn" on:click={() => startEdit(u)}>Edit</button></td>
                   {/if}
