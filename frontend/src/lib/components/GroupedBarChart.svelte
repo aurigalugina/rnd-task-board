@@ -20,24 +20,24 @@
   }
 
   const vbW = 640;
-  const vbH = 180;
-  const padLeft = 35;
-  const padBottom = 14;
-  const padTop = 8;
-  const padRight = 8;
+  const vbH = 140;
+  const padLeft = 30;
+  const padBottom = 10;
+  const padTop = 5;
+  const padRight = 5;
   const plotW = vbW - padLeft - padRight;
   const plotH = vbH - padTop - padBottom;
   const ticks = [0, 25, 50, 75, 100];
 
   $: groupW = data.length ? plotW / data.length : plotW;
-  $: barW = Math.min(12, groupW / 3);
+  $: barW = Math.min(10, groupW / 3);
 
   function y(v: number) {
     return padTop + plotH - (Math.min(v, 100) / 100) * plotH;
   }
 </script>
 
-<svg viewBox="0 0 {vbW} {vbH}" width="100%" height="auto" class="bar-chart" role="img" aria-label="Grafik actual vs expected" style="min-height: 160px">
+<svg viewBox="0 0 {vbW} {vbH}" width="100%" height="auto" class="bar-chart" role="img" aria-label="Grafik actual vs expected" style="min-height: 120px">
   {#each ticks as tick}
     <line x1={padLeft} y1={y(tick)} x2={vbW - padRight} y2={y(tick)} stroke="#D6DADD" stroke-width="0.5" opacity="0.4" />
     <text x={padLeft - 3} y={y(tick) + 2} text-anchor="end" font-size="8" fill="var(--text-muted)">{tick}</text>
@@ -119,7 +119,7 @@
   
   @media (max-width: 767px) {
     .bar-chart {
-      height: 150px;
+      height: 120px;
     }
   }
 </style>
