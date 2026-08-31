@@ -20,27 +20,27 @@
   }
 
   const vbW = 640;
-  const vbH = 240;
-  const padLeft = 40;
-  const padBottom = 18;
-  const padTop = 12;
-  const padRight = 10;
+  const vbH = 180;
+  const padLeft = 35;
+  const padBottom = 14;
+  const padTop = 8;
+  const padRight = 8;
   const plotW = vbW - padLeft - padRight;
   const plotH = vbH - padTop - padBottom;
   const ticks = [0, 25, 50, 75, 100];
 
   $: groupW = data.length ? plotW / data.length : plotW;
-  $: barW = Math.min(16, groupW / 3);
+  $: barW = Math.min(12, groupW / 3);
 
   function y(v: number) {
     return padTop + plotH - (Math.min(v, 100) / 100) * plotH;
   }
 </script>
 
-<svg viewBox="0 0 {vbW} {vbH}" width="100%" height="auto" class="bar-chart" role="img" aria-label="Grafik actual vs expected" style="min-height: 200px">
+<svg viewBox="0 0 {vbW} {vbH}" width="100%" height="auto" class="bar-chart" role="img" aria-label="Grafik actual vs expected" style="min-height: 160px">
   {#each ticks as tick}
-    <line x1={padLeft} y1={y(tick)} x2={vbW - padRight} y2={y(tick)} stroke="#D6DADD" stroke-width="0.5" opacity="0.5" />
-    <text x={padLeft - 4} y={y(tick) + 3} text-anchor="end" font-size="9" font-weight="500" fill="var(--text-muted)">{tick}</text>
+    <line x1={padLeft} y1={y(tick)} x2={vbW - padRight} y2={y(tick)} stroke="#D6DADD" stroke-width="0.5" opacity="0.4" />
+    <text x={padLeft - 3} y={y(tick) + 2} text-anchor="end" font-size="8" fill="var(--text-muted)">{tick}</text>
   {/each}
   {#each data as d, i (i)}
     <g transform="translate({padLeft + i * groupW + groupW / 2}, 0)">
@@ -95,46 +95,31 @@
   .bar-chart :global(text) { font-family: inherit; }
   
   .bar-chart {
-    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.08));
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.06));
   }
   
   .bar-expected,
   .bar-actual {
-    animation: growBar 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-    animation-delay: calc(var(--bar-index) * 0.1s);
-    transition: fill 0.3s ease, opacity 0.3s ease;
+    transition: fill 0.2s ease, opacity 0.2s ease;
   }
   
   .bar-expected:hover,
   .bar-actual:hover {
-    opacity: 0.8;
-    filter: brightness(1.1);
+    opacity: 0.85;
   }
   
   .board-dot { 
     cursor: pointer;
-    transition: r 0.3s ease, filter 0.3s ease;
+    transition: r 0.2s ease;
   }
   
   .board-dot:hover {
-    r: 5.5;
-    filter: brightness(1.15) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
-  }
-  
-  @keyframes growBar {
-    from {
-      height: 0;
-      opacity: 0;
-    }
-    to {
-      height: auto;
-      opacity: 1;
-    }
+    r: 5;
   }
   
   @media (max-width: 767px) {
     .bar-chart {
-      height: 180px;
+      height: 150px;
     }
   }
 </style>
