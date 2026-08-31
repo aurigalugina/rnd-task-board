@@ -1772,3 +1772,287 @@ button svg, a svg { display: inline-block; vertical-align: middle; flex-shrink: 
   animation: countUp 0.8s ease-out;
   font-variant-numeric: tabular-nums;
 }
+
+/* ========================================
+   RESPONSIVE & MOBILE-FIRST DESIGN
+   2026-08-31: Modern 2026+ responsive web app
+   ======================================== */
+
+/* Base container */
+.content {
+  padding: 12px;
+  min-height: 420px;
+  background: var(--content-bg);
+  border: 1px solid #C3C8CC;
+  border-top: none;
+  overflow-y: auto;
+}
+
+/* Tablet & Large Screens (1024px+) */
+@media (min-width: 1024px) {
+  .stat-row-8 {
+    grid-template-columns: repeat(8, 1fr);
+  }
+  
+  .two-col {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  
+  .chart-row {
+    gap: 16px;
+  }
+}
+
+/* Tablet (768px - 1023px) */
+@media (max-width: 1023px) {
+  .stat-row-8 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .two-col {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .chart-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .attention-row {
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+  
+  .attention-bar,
+  .attention-name {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Mobile (480px - 767px) */
+@media (max-width: 767px) {
+  .app {
+    font-size: 10px;
+  }
+  
+  .content {
+    padding: 8px;
+  }
+  
+  .titlebar {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .titlebar-left {
+    width: 100%;
+  }
+  
+  .titlebar-btns {
+    width: 100%;
+  }
+  
+  .dash-heading {
+    margin-bottom: 16px;
+    padding: 12px 0;
+  }
+  
+  .dash-heading-title {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  
+  .dash-heading .muted {
+    font-size: 10px;
+  }
+  
+  .dash-filters {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  
+  .dash-filters select,
+  .dash-filters .inline-input {
+    width: 100%;
+  }
+  
+  .stat-row-8 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  
+  .stat-card {
+    padding: 10px 8px;
+  }
+  
+  .stat-label {
+    font-size: 9px;
+    margin-bottom: 4px;
+  }
+  
+  .stat-value {
+    font-size: 14px;
+  }
+  
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-row {
+    flex-direction: column;
+  }
+  
+  .chart-legend {
+    gap: 4px;
+  }
+  
+  .chart-legend-row {
+    gap: 4px;
+    font-size: 9px;
+  }
+  
+  .section {
+    margin-bottom: 12px;
+    padding: 10px;
+  }
+  
+  .section-title {
+    font-size: 10px;
+    margin: -10px -10px 8px -10px;
+    padding: 6px 10px;
+  }
+  
+  .attention-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  
+  .attention-main,
+  .attention-bar,
+  .attention-name {
+    width: 100%;
+  }
+  
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .tabs {
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  
+  .tab-btn {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  
+  .topbar {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .topbar-right {
+    flex-direction: column;
+    width: 100%;
+  }
+}
+
+/* Small Mobile (< 480px) */
+@media (max-width: 479px) {
+  .app {
+    font-size: 9px;
+  }
+  
+  .content {
+    padding: 6px;
+  }
+  
+  .dash-heading-title {
+    font-size: 16px;
+  }
+  
+  .stat-row-8 {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  
+  .stat-card {
+    padding: 8px 6px;
+  }
+  
+  .stat-label {
+    font-size: 8px;
+  }
+  
+  .stat-value {
+    font-size: 12px;
+  }
+  
+  .team-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .sheet-table {
+    font-size: 9px;
+  }
+  
+  .sheet-table th,
+  .sheet-table td {
+    padding: 3px 4px;
+  }
+}
+
+/* Enhanced Chart Animations & Sizing */
+.chart-row {
+  min-height: 250px;
+  position: relative;
+}
+
+/* Make SVG charts responsive */
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Donut & Bar Chart containers */
+.chart-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Better spacing for legends on mobile */
+@media (max-width: 767px) {
+  .chart-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .chart-legend {
+    width: 100%;
+  }
+}
+
+/* Touch-friendly buttons on mobile */
+@media (max-width: 767px) {
+  button, .quick-btn, .tab-btn, .role-filter-pill {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Smooth transitions for responsive */
+* {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+input, select, textarea, button {
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
