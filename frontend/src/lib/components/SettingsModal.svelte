@@ -480,7 +480,7 @@
                         <select class="inline-input" bind:value={editHrUserId}>
                           <option value="">(belum di-mapping)</option>
                           {#each usersHR as hr (hr.hr_user_id)}
-                            <option value={hr.hr_user_id}>{hr.nama_lengkap} — {hr.email}</option>
+                            <option value={String(hr.hr_user_id)}>{hr.nama_lengkap} — {hr.email}</option>
                           {/each}
                         </select>
                         <select class="inline-input" bind:value={editTaskScopeVisibility}>
@@ -543,7 +543,7 @@
             <select class="inline-input" bind:value={newHrUserId}>
               <option value="">Mapping HR (opsional)</option>
               {#each usersHR as hr (hr.hr_user_id)}
-                <option value={hr.hr_user_id}>{hr.nama_lengkap} — {hr.email}</option>
+                <option value={String(hr.hr_user_id)}>{hr.nama_lengkap} — {hr.email}</option>
               {/each}
             </select>
             <div class="role-filter-pills">
