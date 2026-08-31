@@ -22,14 +22,15 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type User struct {
-	ID          string   `json:"id"`
-	DisplayName string   `json:"display_name"`
-	Initials    string   `json:"initials"`
-	Email       string   `json:"email"`
-	OrgTeam     string   `json:"org_team"`
-	Roles       []string `json:"roles"`
-	AccessLevel string   `json:"access_level"`
-	HRUserID    *int     `json:"hr_user_id"`
+	ID                   string   `json:"id"`
+	DisplayName          string   `json:"display_name"`
+	Initials             string   `json:"initials"`
+	Email                string   `json:"email"`
+	OrgTeam              string   `json:"org_team"`
+	Roles                []string `json:"roles"`
+	AccessLevel          string   `json:"access_level"`
+	TaskScopeVisibility  string   `json:"task_scope_visibility"` // 2026-08-31
+	HRUserID             *int     `json:"hr_user_id"`
 }
 
 type Me struct {
@@ -45,7 +46,7 @@ type Role struct {
 // List mengimplementasikan GET /users (otorisasi: admin/spv — FR-USR-03).
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
-		SELECT id, display_name, initials, email, org_team, access_level, hr_user_id FROM users ORDER BY created_at
+		SELECT id, display_name, initials, email, org_team, access_level, task_scope_visibility, hr_user_id FROM users ORDER BY created_at
 	`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -56,7 +57,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	users := []User{}
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Initials, &u.Email, &u.OrgTeam, &u.AccessLevel, &u.HRUserID); err != nil {
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Initials, &u.Email, &u.OrgTeam, &u.AccessLevel, &u.TaskScopeVisibility, &u.HRUserID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
