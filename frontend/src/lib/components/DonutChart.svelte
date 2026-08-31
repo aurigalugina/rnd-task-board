@@ -2,11 +2,12 @@
   // Donut chart custom SVG (bukan library) — lihat
   // docs/decision-log/decision-log-design-system-adoption-20260809.md.
   // 2026-08-31: Enhanced with animations + responsive sizing
+  // 2026-09-01: Fixed responsive sizing + min dimensions
   export let data: { name: string; value: number; color: string }[];
-  export let size = 160;
+  export let size = 200; // Increased default size for better visibility
 
-  const strokeWidth = size * 0.23;
-  $: r = size / 2 - strokeWidth / 2 - 2;
+  const strokeWidth = size * 0.22;
+  $: r = size / 2 - strokeWidth / 2 - 4;
   $: circumference = 2 * Math.PI * r;
   $: total = data.reduce((s, d) => s + d.value, 0) || 1;
   $: segments = (() => {
@@ -20,33 +21,46 @@
   })();
 </script>
 
-<svg 
-  width={size} 
-  height={size} 
-  viewBox="0 0 {size} {size}" 
-  role="img" 
-  aria-label="Diagram donut"
-  class="donut-chart"
->
-  <g transform="rotate(-90 {size / 2} {size / 2})">
-    {#each segments as seg (seg.index)}
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke={seg.color}
-        stroke-width={strokeWidth}
-        stroke-dasharray="{seg.length} {circumference - seg.length}"
-        stroke-dashoffset={-seg.offset}
-        class="donut-segment"
-        style="--segment-index: {seg.index}"
-      />
-    {/each}
-  </g>
-</svg>
+<div class="donut-wrapper">
+  <svg 
+    width="100%" 
+    height="100%" 
+    viewBox="0 0 {size} {size}" 
+    role="img" 
+    aria-label="Diagram donut"
+    class="donut-chart"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g transform="rotate(-90 {size / 2} {size / 2})">
+      {#each segments as seg (seg.index)}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={seg.color}
+          stroke-width={strokeWidth}
+          stroke-dasharray="{seg.length} {circumference - seg.length}"
+          stroke-dashoffset={-seg.offset}
+          stroke-linecap="round"
+          class="donut-segment"
+          style="--segment-index: {seg.index}"
+        />
+      {/each}
+    </g>
+  </svg>
+</div>
 
 <style>
+  .donut-wrapper {
+    width: 100%;
+    min-width: 150px;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .donut-chart {
     max-width: 100%;
     height: auto;
@@ -57,12 +71,13 @@
     animation: drawDonut 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     animation-delay: calc(var(--segment-index) * 0.15s);
     transform-origin: center;
-    transition: stroke-width 0.3s ease, filter 0.3s ease;
+    transition: stroke-width 0.3s ease, filter 0.3s ease, opacity 0.3s ease;
   }
 
   .donut-segment:hover {
     stroke-width: 0;
-    filter: brightness(1.1);
+    filter: brightness(1.15);
+    opacity: 0.9;
   }
 
   @keyframes drawDonut {
@@ -75,17 +90,21 @@
     }
   }
 
+  @media (max-width: 1023px) {
+    .donut-wrapper {
+      min-width: 140px;
+    }
+  }
+
   @media (max-width: 767px) {
-    .donut-chart {
-      width: 120px;
-      height: 120px;
+    .donut-wrapper {
+      min-width: 120px;
     }
   }
 
   @media (max-width: 479px) {
-    .donut-chart {
-      width: 100px;
-      height: 100px;
+    .donut-wrapper {
+      min-width: 100px;
     }
   }
 </style>
