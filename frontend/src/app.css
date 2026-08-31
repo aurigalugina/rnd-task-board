@@ -143,8 +143,9 @@ a { color: var(--win-blue); }
 .two-col .section { margin-bottom: 0; }
 
 .chart-legend { display: flex; flex-direction: column; gap: 6px; }
-.chart-legend-row { display: flex; align-items: center; gap: 6px; }
-.chart-legend-row .mono { min-width: 20px; text-align: right; }
+.chart-legend-row { display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
+.chart-legend-row .small { color: var(--text-primary); font-weight: 500; }
+.chart-legend-row .mono { min-width: 20px; text-align: right; color: var(--text-primary); font-weight: 600; }
 .chart-legend-swatch { width: 9px; height: 9px; flex-shrink: 0; border: 1px solid #808080; }
 /* Varian legend GroupedBarChart -- baris chip yang WRAP (bukan kolom tegak
    sempit kayak legend donut), karena bisa nampung banyak board sekaligus.
@@ -173,20 +174,21 @@ a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
 .sheet-table td { padding: 5px 7px; border-bottom: 1px solid #D6DADD; }
 .sheet-table tr:nth-child(even) td { background: var(--content-alt); }
 
-.section { margin-bottom: 18px; }
+.section { margin-bottom: 18px; background: var(--content-bg); padding: 12px; border-radius: 12px; }
 .section-title {
-  font-size: 11px; font-weight: bold; margin-bottom: 8px; padding: 3px 6px;
-  background: linear-gradient(90deg, var(--titlebar-a), var(--titlebar-b)); color: var(--titlebar-text);
+  font-size: 11px; font-weight: bold; margin: -12px -12px 8px -12px; padding: 8px 12px;
+  background: linear-gradient(90deg, var(--titlebar-a), var(--titlebar-b)); color: var(--titlebar-text); border-radius: 12px 12px 0 0;
 }
 .section-title .muted { color: var(--titlebar-text-muted); }
 
 .attention-list { display: flex; flex-direction: column; gap: 4px; }
 .attention-row {
   display: grid; grid-template-columns: 1.4fr 1.3fr auto auto; align-items: center; gap: 12px;
-  background: var(--face); border: 1px solid #C3C8CC; padding: 6px 10px;
+  background: var(--face); border: 1px solid #C3C8CC; padding: 6px 10px; color: var(--text-primary);
 }
 .attention-main { display: flex; flex-direction: column; gap: 1px; }
-.attention-name { font-size: 11px; font-weight: bold; }
+.attention-name { font-size: 11px; font-weight: bold; color: var(--text-primary); }
+.attention-row .small { color: var(--text-muted); }
 .attention-bar { min-width: 140px; }
 .days-late { color: var(--win-red); font-weight: bold; }
 /* Tint baris yang sudah lewat deadline, biar keliatan tanpa perlu baca
