@@ -1,13 +1,12 @@
 <script lang="ts">
   // Donut chart custom SVG (bukan library) — lihat
   // docs/decision-log/decision-log-design-system-adoption-20260809.md.
-  // 2026-08-31: Enhanced with animations + responsive sizing
-  // 2026-09-01: Fixed responsive sizing + min dimensions
+  // 2026-09-01: Reverted to balanced size (too large was overwhelming)
   export let data: { name: string; value: number; color: string }[];
-  export let size = 200; // Increased default size for better visibility
+  export let size = 130; // Back to smaller, cleaner size
 
-  const strokeWidth = size * 0.22;
-  $: r = size / 2 - strokeWidth / 2 - 4;
+  const strokeWidth = size * 0.23;
+  $: r = size / 2 - strokeWidth / 2 - 2;
   $: circumference = 2 * Math.PI * r;
   $: total = data.reduce((s, d) => s + d.value, 0) || 1;
   $: segments = (() => {
@@ -54,7 +53,7 @@
 <style>
   .donut-wrapper {
     width: 100%;
-    min-width: 150px;
+    max-width: 160px;
     aspect-ratio: 1;
     display: flex;
     align-items: center;
@@ -64,7 +63,7 @@
   .donut-chart {
     max-width: 100%;
     height: auto;
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08));
   }
 
   .donut-segment {
@@ -92,19 +91,20 @@
 
   @media (max-width: 1023px) {
     .donut-wrapper {
-      min-width: 140px;
+      max-width: 140px;
     }
   }
 
   @media (max-width: 767px) {
     .donut-wrapper {
-      min-width: 120px;
+      max-width: 120px;
     }
   }
 
   @media (max-width: 479px) {
     .donut-wrapper {
-      min-width: 100px;
+      max-width: 100px;
     }
   }
 </style>
+

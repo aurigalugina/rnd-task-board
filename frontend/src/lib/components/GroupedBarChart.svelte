@@ -19,28 +19,28 @@
     goto(`/boards?board=${id}`);
   }
 
-  const vbW = 800;
-  const vbH = 350;
-  const padLeft = 50;
-  const padBottom = 30;
-  const padTop = 20;
-  const padRight = 20;
+  const vbW = 640;
+  const vbH = 240;
+  const padLeft = 40;
+  const padBottom = 18;
+  const padTop = 12;
+  const padRight = 10;
   const plotW = vbW - padLeft - padRight;
   const plotH = vbH - padTop - padBottom;
   const ticks = [0, 25, 50, 75, 100];
 
   $: groupW = data.length ? plotW / data.length : plotW;
-  $: barW = Math.min(20, groupW / 3);
+  $: barW = Math.min(16, groupW / 3);
 
   function y(v: number) {
     return padTop + plotH - (Math.min(v, 100) / 100) * plotH;
   }
 </script>
 
-<svg viewBox="0 0 {vbW} {vbH}" width="100%" height="auto" class="bar-chart" role="img" aria-label="Grafik actual vs expected" style="min-height: 300px">
+<svg viewBox="0 0 {vbW} {vbH}" width="100%" height="auto" class="bar-chart" role="img" aria-label="Grafik actual vs expected" style="min-height: 200px">
   {#each ticks as tick}
-    <line x1={padLeft} y1={y(tick)} x2={vbW - padRight} y2={y(tick)} stroke="currentColor" stroke-width="0.8" opacity="0.15" />
-    <text x={padLeft - 8} y={y(tick) + 4} text-anchor="end" font-size="11" font-weight="600" fill="var(--text-muted)">{tick}%</text>
+    <line x1={padLeft} y1={y(tick)} x2={vbW - padRight} y2={y(tick)} stroke="#D6DADD" stroke-width="0.5" opacity="0.5" />
+    <text x={padLeft - 4} y={y(tick) + 3} text-anchor="end" font-size="9" font-weight="500" fill="var(--text-muted)">{tick}</text>
   {/each}
   {#each data as d, i (i)}
     <g transform="translate({padLeft + i * groupW + groupW / 2}, 0)">
@@ -48,9 +48,9 @@
         x={-barW - 2} 
         y={y(d.expected)} 
         width={barW} 
-        height={Math.max(1, padTop + plotH - y(d.expected))}
-        fill="#9CA3AF" 
-        rx="3"
+        height={padTop + plotH - y(d.expected)}
+        fill="#AEB6BC" 
+        rx="2"
         class="bar-expected"
         style="--bar-index: {i}"
       />
@@ -58,9 +58,9 @@
         x={2} 
         y={y(d.actual)} 
         width={barW} 
-        height={Math.max(1, padTop + plotH - y(d.actual))}
+        height={padTop + plotH - y(d.actual)}
         fill="var(--win-blue)" 
-        rx="3"
+        rx="2"
         class="bar-actual"
         style="--bar-index: {i}"
       />
@@ -81,15 +81,6 @@
 </svg>
 
 <div class="chart-legend chart-legend-flow">
-  <div class="legend-item" style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px;">
-    <span style="width: 14px; height: 14px; background: #9CA3AF; border-radius: 2px;"></span>
-    <span class="small" style="color: var(--text-muted);">Expected</span>
-  </div>
-  <div class="legend-item" style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px;">
-    <span style="width: 14px; height: 14px; background: var(--win-blue); border-radius: 2px;"></span>
-    <span class="small" style="color: var(--text-muted);">Actual</span>
-  </div>
-  <div style="border-top: 1px solid var(--text-muted); margin: 8px 0;"></div>
   {#each data as d (d.id)}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -143,7 +134,7 @@
   
   @media (max-width: 767px) {
     .bar-chart {
-      height: 220px;
+      height: 180px;
     }
   }
 </style>
