@@ -4,7 +4,7 @@
   import { auth } from '$lib/stores/authStore';
   import { theme, THEMES } from '$lib/stores/themeStore';
   import type { AccessLevel, ManagedUser, NotificationSettings, ReferensiTim, ReferensiUserHR, Role } from '$lib/types';
-  import { setupTokenApi, streamSetupToken, type AuthStatus } from '$lib/setupTokenClient';
+  import { setupTokenApi, streamSetupToken, stripAnsi, extractLoginUrl, type AuthStatus } from '$lib/setupTokenClient';
   import { X, Bot, Smartphone, Settings as SettingsIcon, CircleCheck, CircleX, Clock, Check, KeyRound } from 'lucide-svelte';
 
   const dispatch = createEventDispatcher<{ close: void }>();
@@ -330,6 +330,13 @@
   let authInputValue = '';
   let authSendingInput = false;
   let authOutputBox: HTMLElement | undefined;
+
+  // Output mentah `claude setup-token` penuh kode ANSI (warna/cursor
+  // positioning, didesain buat PTY interaktif) -- strip biar kebaca di web,
+  // dan ekstrak URL login-nya terpisah biar bisa ditampilkan sebagai link
+  // yang bisa langsung diklik (bukan dicari manual di tengah teks log).
+  $: authOutputClean = stripAnsi(authOutput);
+  $: authLoginUrl = extractLoginUrl(authOutputClean);
 
   async function loadAuthStatus() {
     authStatusLoading = true;
@@ -729,7 +736,12 @@
           {/if}
 
           {#if authStreaming || authOutput}
-            <div class="setup-token-log" bind:this={authOutputBox}>{authOutput || 'Menunggu output...'}</div>
+            {#if authLoginUrl}
+              <a class="quick-btn" href={authLoginUrl} target="_blank" rel="noopener noreferrer" style="align-self:flex-start">
+                Buka link login Claude
+              </a>
+            {/if}
+            <div class="setup-token-log" bind:this={authOutputBox}>{authOutputClean || 'Menunggu output...'}</div>
           {/if}
 
           {#if authStreaming}

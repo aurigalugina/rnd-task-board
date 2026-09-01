@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractErrorMessage, parseSseMessage } from './setupTokenClient';
+import { extractErrorMessage, extractLoginUrl, parseSseMessage, stripAnsi } from './setupTokenClient';
 
 describe('parseSseMessage', () => {
   it('parses a session event', () => {
@@ -56,5 +56,49 @@ describe('extractErrorMessage', () => {
 
   it('falls back to the raw text when JSON has no string "error" field', () => {
     expect(extractErrorMessage(500, '{"other":"field"}')).toBe('{"other":"field"}');
+  });
+});
+
+describe('stripAnsi', () => {
+  it('removes CSI color codes', () => {
+    expect(stripAnsi('\x1b[38;5;174mWelcome\x1b[39m')).toBe('Welcome');
+  });
+
+  it('removes cursor-positioning CSI codes', () => {
+    expect(stripAnsi('\x1b[6G*\x1b[46G\u2588\u2588\u2588')).toBe('*\u2588\u2588\u2588');
+  });
+
+  it('removes two-character escape sequences and carriage returns', () => {
+    expect(stripAnsi('\x1b7\x1b8\x1b[?25hhello\r\r\nworld')).toBe('hello\nworld');
+  });
+
+  it('leaves plain text untouched', () => {
+    expect(stripAnsi('plain text, no codes')).toBe('plain text, no codes');
+  });
+});
+
+describe('extractLoginUrl', () => {
+  it('joins a URL wrapped across multiple lines by the terminal', () => {
+    const output = [
+      "Browser didn't open? Use the url below to sign in (c to copy)",
+      '',
+      'https://claude.com/cai/oauth/authorize?code=true&client_id=abc&redir',
+      'ect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&state=xyz',
+      '',
+      '',
+      'Paste code here if prompted >'
+    ].join('\n');
+    expect(extractLoginUrl(output)).toBe(
+      'https://claude.com/cai/oauth/authorize?code=true&client_id=abc&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&state=xyz'
+    );
+  });
+
+  it('returns null when there is no URL in the output', () => {
+    expect(extractLoginUrl('just some CLI banner text, no link yet')).toBeNull();
+  });
+
+  it('stops at "Paste code" even without a blank line separator', () => {
+    const output = 'https://claude.com/cai/oauth/authorize?code=truePaste code here if prompted >';
+    expect(extractLoginUrl(output)).toBe('https://claude.com/cai/oauth/authorize?code=true');
   });
 });

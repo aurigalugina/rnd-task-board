@@ -73,6 +73,38 @@ export function extractErrorMessage(status: number, rawText: string): string {
   return rawText;
 }
 
+// stripAnsi membuang kode ANSI (escape sequence warna, cursor positioning,
+// dst) yang dikirim `claude setup-token` -- CLI itu didesain buat terminal
+// interaktif (PTY), bukan buat direndernya polos di web. Tanpa ini,
+// authOutput penuh escape code mentah (\x1b[38;5;174m, \x1b[46G, dst) yang
+// bikin log-nya sama sekali gak kebaca di UI. Regex ini cover CSI sequence
+// (\x1b[...huruf) dan sequence 2-karakter lain (\x1b7, \x1b8, dst).
+export function stripAnsi(input: string): string {
+  // eslint-disable-next-line no-control-regex
+  return input
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+    .replace(/\x1b[()][A-Za-z0-9]/g, '')
+    .replace(/\x1b./g, '')
+    .replace(/\r/g, '');
+}
+
+// extractLoginUrl mencari URL OAuth login di output CLI yang sudah di-strip
+// ANSI-nya -- CLI membungkus URL panjang jadi beberapa baris terpisah spasi
+// kosong (line-wrap layar terminal), jadi baris "https://..." harus
+// disambung dulu dengan baris lanjutannya sebelum bisa dipakai sebagai href
+// yang valid (query string terputus di tengah kalau tidak).
+export function extractLoginUrl(strippedOutput: string): string | null {
+  const idx = strippedOutput.indexOf('https://');
+  if (idx === -1) return null;
+  // Ambil sampai whitespace ganda (baris kosong) atau baris "Paste code..."
+  // -- indikator akhir blok URL di output asli `claude setup-token`.
+  const rest = strippedOutput.slice(idx);
+  const stopMatch = rest.match(/\n\s*\n|Paste\s*code/);
+  const urlBlock = stopMatch ? rest.slice(0, stopMatch.index) : rest;
+  const url = urlBlock.replace(/\s+/g, '').trim();
+  return url.startsWith('https://') ? url : null;
+}
+
 // streamSetupToken membuka koneksi SSE dan memanggil onEvent per pesan yang
 // berhasil diurai. Selesai (resolve) begitu stream server ditutup (event
 // "done" sudah pasti dikirim sebelum itu oleh claude-chat-service, kecuali

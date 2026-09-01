@@ -2,6 +2,7 @@
  * Test untuk logic "entries dapat diedit dalam 3 hari ke belakang"
  * Entries 3+ hari ke belakang = read-only
  */
+import { describe, expect, it } from 'vitest';
 
 describe('isDayOlderThan3Days', () => {
   const today = new Date().toLocaleDateString('en-CA');
