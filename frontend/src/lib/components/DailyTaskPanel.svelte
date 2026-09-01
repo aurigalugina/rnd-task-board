@@ -41,7 +41,7 @@
   let cloning = false;
   let cloneError: string | null = null;
 
-  let entryModal: { entry: DayEntry | null; dailyTaskId: string; prefillDate: string; isPast: boolean } | null = null;
+  let entryModal: { entry: DayEntry | null; dailyTaskId: string; prefillDate: string } | null = null;
 
   // Collapse daily task card -- UI state doang, TIDAK persist ke DB (localStorage
   // browser per-device, default SEMUA collapsed). Lihat
@@ -72,6 +72,7 @@
   // Filter status: default cuma nampilin yang "ongoing" (belum 100% DAN belum
   // lewat end_date) -- toggle buat nampilin yang sudah selesai/lampau juga.
   let showCompleted = false;
+  const today = new Date().toLocaleDateString('en-CA'); // en-CA = YYYY-MM-DD
   function isOngoing(dt: DailyTask): boolean {
     return !(dt.actual_pct === 100 || dt.end_date < today);
   }
@@ -164,24 +165,12 @@
     return day === 0 || day === 6;
   }
 
-  // today di-compute sekali saat komponen mount (string YYYY-MM-DD lokal).
-  // Entries dalam 3 hari ke belakang BISA diedit; 3+ hari ke belakang di-lock (read-only).
-  // Entries masa depan BISA diedit.
-  const today = new Date().toLocaleDateString('en-CA'); // en-CA = YYYY-MM-DD
-  function isDayOlderThan3Days(entryDate: string): boolean {
-    const entryDateObj = new Date(`${entryDate}T00:00:00Z`);
-    const todayObj = new Date(`${today}T00:00:00Z`);
-    const diffMs = todayObj.getTime() - entryDateObj.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    return diffDays > 3;
-  }
-
-  function openEditModal(day: DayEntry, dailyTaskId: string, past: boolean) {
-    entryModal = { entry: day, dailyTaskId, prefillDate: day.entry_date, isPast: past };
+  function openEditModal(day: DayEntry, dailyTaskId: string) {
+    entryModal = { entry: day, dailyTaskId, prefillDate: day.entry_date };
   }
 
   function openNewEntryModal(dailyTaskId: string, prefillDate: string) {
-    entryModal = { entry: null, dailyTaskId, prefillDate, isPast: false };
+    entryModal = { entry: null, dailyTaskId, prefillDate };
   }
 
   async function handleModalSaved() {
@@ -310,16 +299,14 @@
           </thead>
           <tbody>
             {#each dt.days as day (day.id)}
-              {@const past = isDayOlderThan3Days(day.entry_date)}
               {@const pb = progressBadge(day.progress_pct)}
               <!-- svelte-ignore a11y-click-events-have-key-events -->
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-              <tr class="de-row {isWeekendDate(day.entry_date) ? 'row-weekend' : ''} {past ? 'row-past' : ''}"
-                on:click={() => openEditModal(day, dt.id, past)}>
+              <tr class="de-row {isWeekendDate(day.entry_date) ? 'row-weekend' : ''}"
+                on:click={() => openEditModal(day, dt.id)}>
                 <td class="mono small">
                   {day.entry_date}
                   {#if isWeekendDate(day.entry_date)}<span class="lembur-badge">lembur</span>{/if}
-                  {#if past}<span class="past-badge">lampau</span>{/if}
                 </td>
                 <td class="de-planned-cell small">{day.planned_text || '—'}</td>
                 <td><span class="badge {pb.cls}">{pb.label}</span></td>
@@ -328,18 +315,16 @@
                 <td class="day-row-actions" on:click|stopPropagation>
                   <button
                     class="icon-btn"
-                    title={past ? 'Tanggal sudah lampau' : 'Tambah task lain di tanggal ' + day.entry_date}
+                    title={'Tambah task lain di tanggal ' + day.entry_date}
                     aria-label="Tambah task lain di tanggal {day.entry_date}"
-                    disabled={past}
                     on:click={() => openNewEntryModal(dt.id, day.entry_date)}
                   >
                     <Plus size={13} />
                   </button>
                   <button
                     class="icon-btn icon-btn-danger"
-                    title={past ? 'Tanggal sudah lampau' : 'Hapus baris ' + day.entry_date}
+                    title={'Hapus baris ' + day.entry_date}
                     aria-label="Hapus baris {day.entry_date}"
-                    disabled={past}
                     on:click={() => deleteDayEntry(day.id)}
                   >
                     <Trash2 size={13} />
@@ -396,7 +381,6 @@
     entry={entryModal.entry}
     prefillDate={entryModal.prefillDate}
     minDate={entryModal.entry === null ? minDate : ''}
-    isPast={entryModal.isPast}
     on:saved={handleModalSaved}
     on:deleted={handleModalDeleted}
     on:close={() => (entryModal = null)}

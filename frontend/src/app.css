@@ -334,15 +334,9 @@ a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
 .daily-day-table th { padding: 4px 6px; }
 .daily-day-table td { padding: 4px 6px; vertical-align: middle; }
 .row-weekend { background: var(--content-alt); }
-.row-past { opacity: 0.6; }
-.row-past input, .row-past select, .row-past button { cursor: not-allowed; }
 .lembur-badge {
   display: inline-block; margin-left: 5px; font-size: 9px; font-weight: bold; color: #FFFFFF;
   background: var(--win-red); padding: 1px 4px; vertical-align: middle;
-}
-.past-badge {
-  display: inline-block; margin-left: 5px; font-size: 9px; font-weight: bold; color: #FFFFFF;
-  background: var(--np-muted, var(--win-muted, #7c859e)); padding: 1px 4px; vertical-align: middle;
 }
 
 /* Toggle switch (Toggle.svelte) -- pola modern buat boolean state, warnanya
@@ -1572,10 +1566,6 @@ button svg, a svg { display: inline-block; vertical-align: middle; flex-shrink: 
   color: var(--titlebar-text);
 }
 .de-modal-title { font-size: 11px; font-weight: bold; }
-.de-modal-badge-past {
-  display: inline-block; margin-left: 8px; font-size: 9px; font-weight: normal;
-  padding: 1px 5px; border-radius: 8px; background: rgba(0,0,0,.22);
-}
 .de-close-btn {
   color: var(--titlebar-text) !important; background: transparent !important;
   border-color: transparent !important; min-width: unset; padding: 2px;
