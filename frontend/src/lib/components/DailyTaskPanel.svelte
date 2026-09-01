@@ -165,10 +165,15 @@
   }
 
   // today di-compute sekali saat komponen mount (string YYYY-MM-DD lokal).
-  // Baris lampau (entry_date < today) di-lock: edit dari modal hanya-baca.
+  // Entries dalam 3 hari ke belakang BISA diedit; 3+ hari ke belakang di-lock (read-only).
+  // Entries masa depan BISA diedit.
   const today = new Date().toLocaleDateString('en-CA'); // en-CA = YYYY-MM-DD
-  function isPastDate(entryDate: string): boolean {
-    return entryDate < today;
+  function isDayOlderThan3Days(entryDate: string): boolean {
+    const entryDateObj = new Date(`${entryDate}T00:00:00Z`);
+    const todayObj = new Date(`${today}T00:00:00Z`);
+    const diffMs = todayObj.getTime() - entryDateObj.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays > 3;
   }
 
   function openEditModal(day: DayEntry, dailyTaskId: string, past: boolean) {
@@ -305,7 +310,7 @@
           </thead>
           <tbody>
             {#each dt.days as day (day.id)}
-              {@const past = isPastDate(day.entry_date)}
+              {@const past = isDayOlderThan3Days(day.entry_date)}
               {@const pb = progressBadge(day.progress_pct)}
               <!-- svelte-ignore a11y-click-events-have-key-events -->
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
