@@ -165,7 +165,7 @@ describe('computeDashboardStats', () => {
     expect(stats.nearestDeadline.map((b) => b.daysLeft)).toEqual([1, 2, 3, 7, 8]);
   });
 
-  it('excludes ONLY done boards from activeBoards/nearestDeadline -- not_started and hold still included', () => {
+  it('activeBoards/nearestDeadline include ALL boards from backend, including done -- hiding is now archive-only, not status-based', () => {
     const boards = aggregateBoards([
       board('b1', 'Done', [{ signed: true, days_left: -99 }]),
       board('b2', 'Running', [{ actual_pct: 50, days_left: 5 }]),
@@ -173,11 +173,8 @@ describe('computeDashboardStats', () => {
       board('b4', 'Hold', [{ on_hold: true, days_left: 3 }])
     ]);
     const stats = computeDashboardStats(boards);
-    expect(stats.activeBoards.map((b) => b.boardName).sort()).toEqual(['Hold', 'NotStarted', 'Running']);
-    expect(stats.nearestDeadline.map((b) => b.boardName)).not.toContain('Done');
-    expect(stats.nearestDeadline.map((b) => b.boardName)).toEqual(
-      expect.arrayContaining(['Hold', 'NotStarted', 'Running'])
-    );
+    expect(stats.activeBoards.map((b) => b.boardName).sort()).toEqual(['Done', 'Hold', 'NotStarted', 'Running']);
+    expect(stats.nearestDeadline.map((b) => b.boardName)).toContain('Done');
   });
 
   it('a freshly created empty board (0 big tasks) shows up in activeBoards, not just the stat counts', () => {

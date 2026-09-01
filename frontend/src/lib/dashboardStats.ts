@@ -87,12 +87,16 @@ export type DashboardStats = {
   nearestDeadline: BoardAgg[];
 };
 
-// activeBoards = SEMUA board KECUALI yang sudah "done" (selesai, semua Big
-// Task sign-off) -- dipakai bareng oleh progress chart, attention-list, DAN
-// nearestDeadline (satu aturan konsisten, bukan beda-beda per section).
-// Board "done" sudah cukup terwakili di stat card/donut summary, gak perlu
-// dipantau progress-nya lagi di sini. Lihat
-// docs/decision-log/decision-log-dashboard-progress-scope-20260810.md.
+// activeBoards = SEMUA board yang di-return backend (backend sudah otomatis
+// mengecualikan board yang di-archive manual lewat GET /boards/archive --
+// lihat decision-log-board-archive-20260812.md). Board berstatus "done"
+// SENGAJA TETAP ditampilkan di sini (progress chart, attention-list,
+// nearestDeadline) -- sebelumnya disembunyikan begitu semua Big Task
+// sign-off, tapi itu bikin project yang baru selesai "menghilang" dari
+// dashboard padahal belum di-archive manual. Sekarang mekanisme "hilang
+// dari dashboard" MURNI lewat archive manual (aksi eksplisit user), bukan
+// otomatis dari status. Lihat decision-log-dashboard-progress-scope-20260901.md
+// (supersedes decision-log-dashboard-progress-scope-20260810.md).
 export function computeDashboardStats(boards: BoardAgg[]): DashboardStats {
   const total = boards.length;
   const notStarted = boards.filter((b) => b.status === 'not_started').length;
@@ -103,7 +107,7 @@ export function computeDashboardStats(boards: BoardAgg[]): DashboardStats {
   const lose = boards.filter((b) => b.verdict === 'lose').length;
   const completionRate = total ? Math.round((done / total) * 100) : 0;
 
-  const activeBoards = boards.filter((b) => b.status !== 'done');
+  const activeBoards = boards;
   const loseBoards = boards.filter((b) => b.verdict === 'lose');
   const nearestDeadline = [...activeBoards].sort((a, b) => a.daysLeft - b.daysLeft).slice(0, 5);
 
