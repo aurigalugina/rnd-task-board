@@ -99,10 +99,23 @@ export function runSetupToken(
 }
 
 export function extractToken(output: string): string | undefined {
-  const prefixed = output.match(/\bsk-ant-oat[0-9A-Za-z_-]{10,}\b/);
+  // Match di RAW output (belum di-strip ANSI-nya) dan pakai lookahead ke
+  // "\r"/"\n"/ESC/akhir-string sebagai batas token -- BUKAN "\b" (word
+  // boundary). Kenapa: `claude setup-token` nyetak token diikuti langsung "\r"
+  // sebelum sequence ANSI pindah baris (cursor-move ke teks penjelasan
+  // berikutnya, mis. "Store this token securely..."). Kalau di-strip ANSI
+  // dulu (yang juga membuang "\r"), token dan kata berikutnya jadi NEMPEL
+  // tanpa separator sama sekali ("...fGDNbAAAStore..."), dan "\b" (yang cuma
+  // peduli transisi word/non-word char) ikut nyaplok kata itu jadi bagian
+  // token -- ditemukan pas verifikasi manual pertama kali, 2026-09-01 (token
+  // asli 108 char, match versi lama 113 char karena kebablasan sampai
+  // "...Store"). Raw buffer + lookahead "\r"/ESC menghormati batas baris
+  // ASLI yang dikirim CLI, bukan tebak-tebakan dari tipe karakter.
+  const prefixed = output.match(/sk-ant-oat[0-9A-Za-z_-]{10,}(?=[\r\n\x1b]|$)/);
   if (prefixed) return prefixed[0];
 
-  const lines = output
+  const clean = stripAnsi(output);
+  const lines = clean
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
@@ -110,4 +123,19 @@ export function extractToken(output: string): string | undefined {
   if (last && /^[A-Za-z0-9_.\-]{20,}$/.test(last)) return last;
 
   return undefined;
+}
+
+// stripAnsi membuang kode ANSI (warna, cursor positioning) dari output PTY
+// mentah -- diekstrak jadi fungsi murni supaya bisa ditest tanpa spawn proses
+// beneran. Sama persis dengan versi frontend (setupTokenClient.ts) yang
+// dipakai buat bersihin tampilan log di UI; keduanya sengaja duplikat kecil
+// (beda runtime: satu Node backend, satu browser) daripada bikin package
+// shared cuma buat satu regex.
+export function stripAnsi(input: string): string {
+  // eslint-disable-next-line no-control-regex
+  return input
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
+    .replace(/\x1b[()][A-Za-z0-9]/g, "")
+    .replace(/\x1b./g, "")
+    .replace(/\r/g, "");
 }
