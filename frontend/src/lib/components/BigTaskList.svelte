@@ -221,6 +221,26 @@
   $: boardCompletion = totalBt ? Math.round(bigTasks.reduce((s, b) => s + b.actual_pct, 0) / totalBt) : 0;
   $: projectDone = totalBt > 0 && doneBt === totalBt;
 
+  // Rentang tanggal project (board), diturunkan dari start_date/deadline
+  // seluruh Big Task -- bukan field board sendiri (Board type tidak punya
+  // tanggal, cuma agregasi dari Big Task-nya, konsisten dengan pola
+  // startDate/dueDate di dashboardStats.ts). "Mulai" = tanggal paling awal,
+  // "Target selesai" = deadline paling akhir. Kalau project sudah selesai
+  // (semua Big Task sign-off), tambahkan "Selesai" = signed_at paling akhir
+  // (tanggal sign-off riil, bisa beda dari deadline kalau lebih cepat/telat).
+  $: boardStartDate = totalBt
+    ? bigTasks.reduce((min, bt) => (bt.start_date < min ? bt.start_date : min), bigTasks[0].start_date)
+    : null;
+  $: boardTargetDate = totalBt
+    ? bigTasks.reduce((max, bt) => (bt.deadline > max ? bt.deadline : max), bigTasks[0].deadline)
+    : null;
+  $: boardFinishedDate = projectDone
+    ? bigTasks.reduce<string | null>(
+        (max, bt) => (bt.signed_at && (!max || bt.signed_at > max) ? bt.signed_at : max),
+        null
+      )
+    : null;
+
   async function createBigTask() {
     createError = null;
     creating = true;
@@ -279,6 +299,19 @@
       actionError = (e as Error).message;
     }
   }
+
+  // Format tanggal ke tampilan lokal ringkas, sama pola dengan
+  // archive/+page.svelte & change-requests/+page.svelte (dateStyle medium)
+  // tapi tanpa jam karena ini murni tanggal, bukan timestamp presisi menit.
+  // isDateOnly: true untuk start_date/deadline (backend kirim "YYYY-MM-DD"
+  // polos, butuh T00:00:00 biar Date tidak salah geser timezone jadi hari
+  // sebelumnya) -- false untuk signed_at (backend kirim RFC3339 penuh via
+  // Go time.Time, sudah punya timezone info sendiri).
+  function formatDate(iso: string | null, isDateOnly = true): string {
+    if (!iso) return '—';
+    const d = isDateOnly ? new Date(iso + 'T00:00:00') : new Date(iso);
+    return d.toLocaleDateString('id-ID', { dateStyle: 'medium' });
+  }
 </script>
 
 {#if loading}
@@ -292,6 +325,17 @@
       Status project: <strong>{projectDone ? 'Selesai (semua big task sign-off)' : 'Berjalan'}</strong>
     </span>
     <span class="muted small">{doneBt}/{totalBt} big task sign-off</span>
+    {#if totalBt > 0}
+      <span class="muted small">·</span>
+      <span class="muted small">Mulai: <strong>{formatDate(boardStartDate)}</strong></span>
+      {#if projectDone}
+        <span class="muted small">·</span>
+        <span class="muted small">Selesai: <strong>{formatDate(boardFinishedDate, false)}</strong></span>
+      {:else}
+        <span class="muted small">·</span>
+        <span class="muted small">Target selesai: <strong>{formatDate(boardTargetDate)}</strong></span>
+      {/if}
+    {/if}
   </div>
 
   <div class="stat-row" style="grid-template-columns:repeat(5,1fr)">

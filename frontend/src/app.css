@@ -283,6 +283,7 @@ a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
 .project-status-banner {
   display: flex; align-items: center; gap: 8px; background: var(--face);
   border: 1px solid #C3C8CC; padding: 6px 10px; margin-bottom: 10px;
+  flex-wrap: wrap; row-gap: 4px;
 }
 .project-status-dot { width: 8px; height: 8px; border-radius: 50%; }
 
