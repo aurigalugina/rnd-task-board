@@ -8,4 +8,5 @@ RUN npm run build
 FROM nginx:1.25-alpine
 COPY --from=build /app/build /usr/share/nginx/html
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/upgrade-map.conf /etc/nginx/conf.d/00-upgrade-map.conf
 EXPOSE 80

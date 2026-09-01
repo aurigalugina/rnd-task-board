@@ -44,6 +44,10 @@
   let savingBoardEdit = false;
   let boardEditError = '';
 
+  // Filter boards (2026-09-01)
+  let filterStatus: 'all' | 'not-done' = 'all'; // "all" = semua board, "not-done" = hanya belum selesai
+  let searchBoardName = ''; // real-time search by board name
+
   onMount(async () => {
     try {
       const [boardList, timList] = await Promise.all([
@@ -59,6 +63,23 @@
     } finally {
       loading = false;
     }
+  });
+
+  // Computed: filtered boards based on search + status
+  $: filteredBoards = boards.filter((b) => {
+    // Filter by name search (case-insensitive)
+    const matchName = b.name.toLowerCase().includes(searchBoardName.toLowerCase());
+    if (!matchName) return false;
+    
+    // Filter by status (status filter is placeholder for MVP, bisa di-skip logic-nya)
+    // Untuk sekarang: semua boards pass status filter (karena Board type gak punya status field)
+    // Future: backend bisa return board.status atau count of completed/total big tasks
+    if (filterStatus === 'not-done') {
+      // TODO: implement when Board type has status/signed field from backend
+      return true; // placeholder: show all for now
+    }
+    
+    return true;
   });
 
   $: selectedBoard = boards.find((b) => b.id === selectedBoardId) ?? null;
@@ -144,9 +165,43 @@
 {:else if error}
   <p class="small" style="color:var(--win-red)">Gagal memuat data: {error}. Pastikan backend berjalan di :8080.</p>
 {:else}
+  <!-- Filter section (2026-09-01) -->
+  <div class="boards-filter-section">
+    <div class="filter-container">
+      <div class="filter-group">
+        <label class="filter-label small muted" for="board-search">Cari board</label>
+        <input 
+          id="board-search" 
+          type="text" 
+          class="filter-input" 
+          placeholder="Ketik nama board..." 
+          bind:value={searchBoardName}
+        />
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label small muted">Status</span>
+        <div class="filter-buttons">
+          <button 
+            class="filter-btn {filterStatus === 'all' ? 'filter-btn-active' : ''}"
+            on:click={() => (filterStatus = 'all')}
+          >
+            Semua
+          </button>
+          <button 
+            class="filter-btn {filterStatus === 'not-done' ? 'filter-btn-active' : ''}"
+            on:click={() => (filterStatus = 'not-done')}
+          >
+            Belum Selesai
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="board-pills-row">
     <div class="board-pills">
-      {#each boards as board (board.id)}
+      {#each filteredBoards as board (board.id)}
         <button
           class="board-pill {board.id === selectedBoardId ? 'board-pill-active' : ''}"
           on:click={() => selectBoard(board.id)}

@@ -2056,3 +2056,101 @@ svg {
 input, select, textarea, button {
   transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }
+
+/* ---- Boards Filter Section (2026-09-01) ---- */
+.boards-filter-section {
+  background: var(--content-alt);
+  border: 1px solid #C3C8CC;
+  border-radius: 2px;
+  padding: 8px 8px;
+  margin-bottom: 12px;
+}
+
+.filter-container {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-label {
+  font-weight: bold;
+  display: block;
+  min-width: 80px;
+}
+
+.filter-input {
+  padding: 2px 3px;
+  border: 1px inset #C3C8CC;
+  background: var(--face-light);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 10.5px;
+  min-width: 200px;
+}
+
+.filter-input:focus {
+  outline: none;
+  border: 1px inset var(--win-blue);
+  box-shadow: inset 0 0 2px rgba(52, 80, 110, 0.3);
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.filter-btn {
+  padding: 2px 8px;
+  border: 1px solid #C3C8CC;
+  background: var(--face-light);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.15s ease;
+}
+
+.filter-btn:hover {
+  border-color: var(--win-blue);
+  background: #E8E8E8;
+}
+
+.filter-btn-active {
+  background: var(--win-blue);
+  color: #FFFFFF;
+  font-weight: bold;
+  border-color: var(--win-blue);
+}
+
+.filter-btn-active:hover {
+  background: var(--win-blue);
+  border-color: var(--win-blue);
+}
+
+/* ---- Dark theme adjustments ---- */
+:root[data-theme='retro-dark'] .filter-input,
+:root[data-theme='modern-dark'] .filter-input {
+  background: var(--face-light);
+  color: var(--text-primary);
+}
+
+:root[data-theme='retro-dark'] .filter-btn,
+:root[data-theme='modern-dark'] .filter-btn {
+  background: var(--content-alt);
+  color: var(--text-primary);
+  border-color: #4D4D4D;
+}
+
+:root[data-theme='retro-dark'] .filter-btn:hover,
+:root[data-theme='modern-dark'] .filter-btn:hover {
+  background: var(--face-light);
+  border-color: var(--win-blue);
+}
