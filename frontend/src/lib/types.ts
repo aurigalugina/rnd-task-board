@@ -90,6 +90,20 @@ export type DailyTask = {
   days: DayEntry[];
 };
 
+// Board Backlog: item planning mentah per board sebelum ditentukan Big
+// Task/PIC/tanggal-nya. Reusable (bisa "dipromosikan" jadi Daily Task
+// berkali-kali). Lihat decision-log-board-backlog-20260902.md.
+export type BacklogItem = {
+  id: string;
+  board_id: string;
+  title: string;
+  description: string;
+  created_by: string;
+  created_by_name: string;
+  created_at: string;
+  promoted_count: number;
+};
+
 export type AssignableUser = {
   id: string;
   display_name: string;
@@ -105,6 +119,7 @@ export type ManagedUser = AssignableUser & {
   access_level: AccessLevel;
   hr_user_id: number | null;
   task_scope_visibility?: 'self' | 'team'; // 2026-08-31
+  can_manage_backlog?: boolean; // 2026-09-02, lihat decision-log-board-backlog-20260902.md
 };
 
 export type Role = {

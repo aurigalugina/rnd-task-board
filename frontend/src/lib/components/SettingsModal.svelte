@@ -208,6 +208,7 @@
   let editOrgTeam = '';
   let editAccessLevel: AccessLevel = 'regular_user';
   let editTaskScopeVisibility: 'self' | 'team' = 'team'; // 2026-08-31
+  let editCanManageBacklog = false; // 2026-09-02, lihat decision-log-board-backlog-20260902.md
   let editHrUserId = '';
   let editRoles: Record<string, boolean> = {};
   let savingEdit = false;
@@ -218,6 +219,7 @@
     editOrgTeam = u.org_team;
     editAccessLevel = u.access_level;
     editTaskScopeVisibility = u.task_scope_visibility ?? 'team';
+    editCanManageBacklog = u.can_manage_backlog ?? false;
     editHrUserId = u.hr_user_id !== null ? String(u.hr_user_id) : '';
     editRoles = Object.fromEntries(roles.map((r) => [r.code, u.roles.includes(r.code)]));
     editError = null;
@@ -239,6 +241,7 @@
         org_team: editOrgTeam,
         access_level: editAccessLevel,
         task_scope_visibility: editTaskScopeVisibility,
+        can_manage_backlog: editCanManageBacklog,
         hr_user_id: editHrUserId ? Number(editHrUserId) : null,
         clear_hr_user_id: !editHrUserId,
         role_codes: roleCodes
@@ -494,6 +497,10 @@
                           <option value="team">Lihat semua task tim</option>
                           <option value="self">Lihat hanya task sendiri</option>
                         </select>
+                        <label class="small" style="display:flex;align-items:center;gap:4px">
+                          <input type="checkbox" bind:checked={editCanManageBacklog} />
+                          Boleh kelola backlog
+                        </label>
                         <div class="role-filter-pills">
                           {#each roles as role (role.code)}
                             <label class="role-filter-pill" class:role-filter-pill-active={editRoles[role.code]}>

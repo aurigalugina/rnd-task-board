@@ -189,10 +189,12 @@ func isMemberOfBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID, userID 
 // insertDailyTaskWithDays insert baris daily_tasks + satu day_entries per
 // tanggal kalender dalam rentang [start, end] inklusif (SRS FR-DLY-01/02).
 // reviewOf != nil menandai ini task review dari daily task lain (clone-review).
+// sourceBacklogItemID != nil menandai Daily Task ini lahir dari sebuah Board
+// Backlog item ("promote") -- lihat decision-log-board-backlog-20260902.md.
 func insertDailyTaskWithDays(
 	ctx context.Context, db *pgxpool.Pool,
 	id, bigTaskID, title, picUserID, startDate, endDate string,
-	start, end time.Time, reviewOf *string,
+	start, end time.Time, reviewOf, sourceBacklogItemID *string,
 ) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -201,9 +203,9 @@ func insertDailyTaskWithDays(
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO daily_tasks (id, big_task_id, title, pic_user_id, start_date, end_date, review_of_daily_task_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, id, bigTaskID, title, picUserID, startDate, endDate, reviewOf)
+		INSERT INTO daily_tasks (id, big_task_id, title, pic_user_id, start_date, end_date, review_of_daily_task_id, source_backlog_item_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, id, bigTaskID, title, picUserID, startDate, endDate, reviewOf, sourceBacklogItemID)
 	if err != nil {
 		return err
 	}
@@ -243,6 +245,10 @@ type createDailyTaskRequest struct {
 	PicUserID string `json:"pic_user_id"`
 	StartDate string `json:"start_date"`
 	EndDate   string `json:"end_date"`
+	// SourceBacklogItemID: opsional, diisi kalau Daily Task ini dibuat lewat
+	// "Jadikan Daily Task" dari sebuah Board Backlog item -- lihat
+	// decision-log-board-backlog-20260902.md.
+	SourceBacklogItemID *string `json:"source_backlog_item_id"`
 }
 
 // Create mengimplementasikan POST /big-tasks/{big_task_id}/daily-tasks.
@@ -282,7 +288,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	dailyTaskID := uuid.New().String()
 	if err := insertDailyTaskWithDays(
-		r.Context(), h.db, dailyTaskID, bigTaskID, req.Title, req.PicUserID, req.StartDate, req.EndDate, start, end, nil,
+		r.Context(), h.db, dailyTaskID, bigTaskID, req.Title, req.PicUserID, req.StartDate, req.EndDate, start, end, nil, req.SourceBacklogItemID,
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -367,7 +373,7 @@ func (h *Handler) CloneReview(w http.ResponseWriter, r *http.Request) {
 	newID := uuid.New().String()
 	newTitle := "[Review " + reviewerName + "] " + origTitle
 	if err := insertDailyTaskWithDays(
-		r.Context(), h.db, newID, bigTaskID, newTitle, req.ReviewerUserID, req.StartDate, req.EndDate, start, end, &sourceID,
+		r.Context(), h.db, newID, bigTaskID, newTitle, req.ReviewerUserID, req.StartDate, req.EndDate, start, end, &sourceID, nil,
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

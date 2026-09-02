@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"rndops/backend/internal/auth"
+	"rndops/backend/internal/backlog"
 	"rndops/backend/internal/bigtask"
 	"rndops/backend/internal/board"
 	"rndops/backend/internal/changerequest"
@@ -87,6 +88,7 @@ func main() {
 	userHandler := user.NewHandler(pool)
 	commentHandler := comment.NewHandler(pool)
 	cheatSheetHandler := cheatsheet.NewHandler(pool)
+	backlogHandler := backlog.NewHandler(pool)
 
 	uploadDir := os.Getenv("UPLOAD_DIR")
 	if uploadDir == "" {
@@ -181,6 +183,17 @@ func main() {
 			protected.Post("/boards/{boardID}/cheat-sheet", cheatSheetHandler.Create)
 			protected.Patch("/boards/{boardID}/cheat-sheet/{itemID}", cheatSheetHandler.Update)
 			protected.Delete("/boards/{boardID}/cheat-sheet/{itemID}", cheatSheetHandler.Delete)
+
+			// Board Backlog -- SEMUA user login bisa lihat (List), tapi
+			// Create/Update/Delete digate can_manage_backlog di dalam handler
+			// (super_user ATAU flag independen, BUKAN role) -- lihat
+			// decision-log-board-backlog-20260902.md.
+			protected.Get("/boards/{boardID}/backlog-items", backlogHandler.ListByBoard)
+			protected.Post("/boards/{boardID}/backlog-items", backlogHandler.Create)
+			protected.Patch("/backlog-items/{itemID}", backlogHandler.Update)
+			protected.Delete("/backlog-items/{itemID}", backlogHandler.Delete)
+			protected.Get("/boards/{boardID}/backlog-items/template", backlogHandler.DownloadTemplate)
+			protected.Post("/boards/{boardID}/backlog-items/import", backlogHandler.Import)
 
 			protected.Post("/uploads", uploadHandler.Create)
 			protected.Get("/uploads/{filename}", uploadHandler.Serve)

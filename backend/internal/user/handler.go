@@ -30,6 +30,11 @@ type User struct {
 	Roles                []string `json:"roles"`
 	AccessLevel          string   `json:"access_level"`
 	TaskScopeVisibility  string   `json:"task_scope_visibility"` // 2026-08-31
+	// CanManageBacklog: flag independen dari access_level/roles -- siapa
+	// yang boleh tambah/edit/hapus Board Backlog item. Permintaan user
+	// eksplisit: "jangan terpaut sama role". Lihat
+	// decision-log-board-backlog-20260902.md.
+	CanManageBacklog bool `json:"can_manage_backlog"`
 	HRUserID             *int     `json:"hr_user_id"`
 }
 
@@ -46,7 +51,7 @@ type Role struct {
 // List mengimplementasikan GET /users (otorisasi: admin/spv — FR-USR-03).
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
-		SELECT id, display_name, initials, email, org_team, access_level, task_scope_visibility, hr_user_id FROM users ORDER BY created_at
+		SELECT id, display_name, initials, email, org_team, access_level, task_scope_visibility, can_manage_backlog, hr_user_id FROM users ORDER BY created_at
 	`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -57,7 +62,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	users := []User{}
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Initials, &u.Email, &u.OrgTeam, &u.AccessLevel, &u.TaskScopeVisibility, &u.HRUserID); err != nil {
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Initials, &u.Email, &u.OrgTeam, &u.AccessLevel, &u.TaskScopeVisibility, &u.CanManageBacklog, &u.HRUserID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -235,6 +240,7 @@ type updateUserRequest struct {
 	ClearHR              bool     `json:"clear_hr_user_id"`
 	RoleCodes            []string `json:"role_codes"`
 	TaskScopeVisibility  *string  `json:"task_scope_visibility"` // 2026-08-31: 'self' or 'team'
+	CanManageBacklog     *bool    `json:"can_manage_backlog"`
 }
 
 // Update mengimplementasikan PATCH /users/{id} (otorisasi: admin/spv) — SEBELUM
@@ -288,10 +294,11 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			org_team = COALESCE($2, org_team),
 			access_level = COALESCE($3, access_level),
 			task_scope_visibility = COALESCE($6, task_scope_visibility),
+			can_manage_backlog = COALESCE($7, can_manage_backlog),
 			hr_user_id = CASE WHEN $4 THEN NULL ELSE COALESCE($5, hr_user_id) END,
 			updated_at = now()
 		WHERE id = $1
-	`, targetID, req.OrgTeam, req.AccessLevel, req.ClearHR, hrUserID, req.TaskScopeVisibility)
+	`, targetID, req.OrgTeam, req.AccessLevel, req.ClearHR, hrUserID, req.TaskScopeVisibility, req.CanManageBacklog)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -320,8 +327,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var u User
 	if err := h.db.QueryRow(r.Context(), `
-		SELECT id, display_name, initials, email, org_team, access_level, hr_user_id FROM users WHERE id = $1
-	`, targetID).Scan(&u.ID, &u.DisplayName, &u.Initials, &u.Email, &u.OrgTeam, &u.AccessLevel, &u.HRUserID); err != nil {
+		SELECT id, display_name, initials, email, org_team, access_level, task_scope_visibility, can_manage_backlog, hr_user_id FROM users WHERE id = $1
+	`, targetID).Scan(&u.ID, &u.DisplayName, &u.Initials, &u.Email, &u.OrgTeam, &u.AccessLevel, &u.TaskScopeVisibility, &u.CanManageBacklog, &u.HRUserID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -339,8 +346,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) loadMe(ctx context.Context, userID string) (Me, error) {
 	var m Me
 	err := h.db.QueryRow(ctx, `
-		SELECT id, display_name, initials, email, org_team, theme_preference, access_level, task_scope_visibility, hr_user_id FROM users WHERE id = $1
-	`, userID).Scan(&m.ID, &m.DisplayName, &m.Initials, &m.Email, &m.OrgTeam, &m.ThemePreference, &m.AccessLevel, &m.TaskScopeVisibility, &m.HRUserID)
+		SELECT id, display_name, initials, email, org_team, theme_preference, access_level, task_scope_visibility, can_manage_backlog, hr_user_id FROM users WHERE id = $1
+	`, userID).Scan(&m.ID, &m.DisplayName, &m.Initials, &m.Email, &m.OrgTeam, &m.ThemePreference, &m.AccessLevel, &m.TaskScopeVisibility, &m.CanManageBacklog, &m.HRUserID)
 	if err != nil {
 		return Me{}, err
 	}

@@ -32,6 +32,10 @@ export type UserSummary = {
   // task_scope_visibility ('self'/'team') -- 'team' = akses "lihat semua
   // orang" (dipakai gate edit Team Today, decision-log-team-today-edit-permission-20260902.md).
   task_scope_visibility?: string;
+  // can_manage_backlog: flag independen dari access_level/roles -- siapa
+  // yang boleh tambah/edit/hapus Board Backlog item, lihat
+  // decision-log-board-backlog-20260902.md.
+  can_manage_backlog?: boolean;
 };
 
 type AuthState = {

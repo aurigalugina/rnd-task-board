@@ -6,6 +6,7 @@
   import { auth } from '$lib/stores/authStore';
   import type { Board, BoardCategory, ReferensiTim } from '$lib/types';
   import BigTaskList from '$lib/components/BigTaskList.svelte';
+  import BacklogSection from '$lib/components/BacklogSection.svelte';
   import { Archive, Pencil, X } from 'lucide-svelte';
 
   function handlePageKeydown(e: KeyboardEvent) {
@@ -47,6 +48,10 @@
   // Filter boards (2026-09-01)
   let filterStatus: 'all' | 'not-done' = 'all'; // "all" = semua board, "not-done" = hanya belum selesai
   let searchBoardName = ''; // real-time search by board name
+
+  // Tab Big Task <-> Backlog di dalam board yang lagi dibuka (2026-09-02) --
+  // lihat decision-log-board-backlog-20260902.md.
+  let boardTab: 'bigtasks' | 'backlog' = 'bigtasks';
 
   onMount(async () => {
     try {
@@ -224,7 +229,21 @@
   {/if}
 
   {#if selectedBoardId}
-    <BigTaskList boardId={selectedBoardId} />
+    <div class="board-subtabs">
+      <button class="tab-btn {boardTab === 'bigtasks' ? 'tab-btn-active' : ''}" on:click={() => (boardTab = 'bigtasks')}>
+        Big Task
+      </button>
+      <button class="tab-btn {boardTab === 'backlog' ? 'tab-btn-active' : ''}" on:click={() => (boardTab = 'backlog')}>
+        Backlog
+      </button>
+    </div>
+    {#if boardTab === 'bigtasks'}
+      <BigTaskList boardId={selectedBoardId} />
+    {:else}
+      {#key selectedBoardId}
+        <BacklogSection boardId={selectedBoardId} />
+      {/key}
+    {/if}
   {:else}
     <p class="empty-note">Belum ada board. Buat board pertama di atas.</p>
   {/if}
