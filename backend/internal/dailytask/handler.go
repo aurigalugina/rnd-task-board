@@ -541,6 +541,48 @@ func (h *Handler) DeleteDayEntry(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// DeleteDailyTask mengimplementasikan DELETE /daily-tasks/{daily_task_id} —
+// hapus permanen (bukan soft-delete, konsisten dengan DeleteDayEntry).
+// SENGAJA ditolak (409) selama daily task ini MASIH punya day_entries --
+// permintaan user 2026-09-02: daily task cuma boleh dihapus setelah semua
+// day entries-nya sendiri dikosongkan/dihapus dulu (lewat DeleteDayEntry
+// satu-satu), mencegah hilangnya histori rencana/realisasi/progress secara
+// tidak sengaja hanya dengan menghapus daily task-nya. Lihat
+// decision-log-daily-task-delete-20260902.md.
+//
+// Child records lain (comments, weekly_push_log) sudah ON DELETE CASCADE
+// di skema DB -- dihapus otomatis bersama daily task tanpa perlu ditangani
+// manual di sini. review_of_daily_task_id (daily task lain yang me-review
+// task ini) ON DELETE SET NULL -- tidak ikut terhapus, cukup relasinya
+// diputus.
+func (h *Handler) DeleteDailyTask(w http.ResponseWriter, r *http.Request) {
+	dailyTaskID := chi.URLParam(r, "dailyTaskID")
+
+	var entryCount int
+	if err := h.db.QueryRow(r.Context(), `
+		SELECT COUNT(*) FROM day_entries WHERE daily_task_id = $1
+	`, dailyTaskID).Scan(&entryCount); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if entryCount > 0 {
+		http.Error(w, "hapus dulu semua day entries sebelum bisa hapus daily task ini", http.StatusConflict)
+		return
+	}
+
+	tag, err := h.db.Exec(r.Context(), `DELETE FROM daily_tasks WHERE id = $1`, dailyTaskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		http.Error(w, "daily task tidak ditemukan", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // TeamTodayEntry adalah satu Day Entry milik seorang user pada tanggal
 // terpilih, dilengkapi konteks board/big task/daily task supaya bisa
 // ditampilkan langsung tanpa fetch tambahan di frontend.

@@ -168,6 +168,7 @@ func main() {
 			protected.Get("/big-tasks/{bigTaskID}/daily-tasks", dailyTaskHandler.ListByBigTask)
 			protected.Post("/big-tasks/{bigTaskID}/daily-tasks", dailyTaskHandler.Create)
 			protected.Post("/daily-tasks/{dailyTaskID}/clone-review", dailyTaskHandler.CloneReview)
+			protected.Delete("/daily-tasks/{dailyTaskID}", dailyTaskHandler.DeleteDailyTask)
 			protected.Post("/daily-tasks/{dailyTaskID}/day-entries", dailyTaskHandler.AddDayEntry)
 			protected.Patch("/day-entries/{dayEntryID}", dailyTaskHandler.UpdateDayEntry)
 			protected.Delete("/day-entries/{dayEntryID}", dailyTaskHandler.DeleteDayEntry)

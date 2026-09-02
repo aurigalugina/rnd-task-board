@@ -160,6 +160,26 @@
     }
   }
 
+  // Hapus daily task itu sendiri -- HANYA bisa kalau day entries-nya sudah
+  // kosong (backend menolak 409 kalau masih ada). Permintaan user
+  // 2026-09-02: sebelumnya daily task sama sekali tidak bisa dihapus.
+  // Lihat decision-log-daily-task-delete-20260902.md.
+  let deletingDailyTaskId: string | null = null;
+  async function deleteDailyTask(dt: DailyTask) {
+    if (dt.days.length > 0) return; // guard client-side, tombol juga sudah disabled
+    if (!confirm(`Hapus daily task "${dt.title}"? Tidak bisa dikembalikan.`)) return;
+    deletingDailyTaskId = dt.id;
+    try {
+      await api.del(`/daily-tasks/${dt.id}`);
+      await load({ silent: true });
+      dispatch('updated');
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      deletingDailyTaskId = null;
+    }
+  }
+
   function isWeekendDate(entryDate: string): boolean {
     const day = new Date(`${entryDate}T00:00:00Z`).getUTCDay();
     return day === 0 || day === 6;
@@ -267,6 +287,17 @@
             <MessageSquare size={12} />&nbsp;Komentar
           </button>
           <button class="quick-btn" on:click={() => openCloneForm(dt.id, dt.title)}>+ Review</button>
+          <button
+            class="icon-btn icon-btn-danger"
+            title={dt.days.length > 0
+              ? 'Hapus dulu semua day entries di bawah sebelum bisa hapus daily task ini'
+              : 'Hapus daily task ini'}
+            aria-label="Hapus daily task {dt.title}"
+            disabled={dt.days.length > 0 || deletingDailyTaskId === dt.id}
+            on:click={() => deleteDailyTask(dt)}
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
       </div>
 

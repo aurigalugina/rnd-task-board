@@ -538,6 +538,7 @@ a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
 }
 .panel-header .muted { color: var(--titlebar-text-muted); }
 .icon-btn { background: var(--face); border: 1px outset var(--face); color: #000; cursor: pointer; width: 18px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .icon-btn:active { border-style: inset; }
 .icon-btn-danger:hover { background: var(--win-red); }
 .day-row-actions { display: flex; gap: 4px; white-space: nowrap; }
