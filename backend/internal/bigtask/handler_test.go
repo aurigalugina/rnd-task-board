@@ -121,3 +121,23 @@ func TestDedupeMembers(t *testing.T) {
 		}
 	}
 }
+
+func TestIsValidSeverity(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"critical", true},
+		{"high", true},
+		{"medium", true},
+		{"low", true},
+		{"", false},
+		{"CRITICAL", false}, // case-sensitive -- konsisten dgn CHECK constraint DB
+		{"urgent", false},
+	}
+	for _, c := range cases {
+		if got := isValidSeverity(c.in); got != c.want {
+			t.Errorf("isValidSeverity(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}

@@ -267,6 +267,25 @@ a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
 .badge-neutral::before { background: var(--text-muted); }
 .badge-neutral { color: var(--text-muted); }
 
+/* Severity Big Task (critical/high/medium/low) -- keputusan produk baru
+   2026-09-02, lihat decision-log-bigtask-severity-description-20260902.md.
+   Warna: critical = merah (paling darurat), high = amber, medium = biru
+   (default netral), low = abu-abu (paling santai). */
+.severity-critical::before { background: var(--win-red); }
+.severity-critical { color: var(--win-red); border-color: var(--win-red); font-weight: 800; }
+.severity-high::before { background: var(--win-amber); }
+.severity-high { color: var(--win-amber); border-color: var(--win-amber); }
+.severity-medium::before { background: var(--win-blue); }
+.severity-medium { color: var(--win-blue); border-color: var(--win-blue); }
+.severity-low::before { background: var(--text-muted); }
+.severity-low { color: var(--text-muted); }
+.severity-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  margin-right: 4px; vertical-align: middle;
+}
+.severity-dot-critical { background: var(--win-red); }
+.severity-dot-high { background: var(--win-amber); }
+
 /* ---- Board tabs & big task / daily task ---- */
 .board-pills { display: flex; gap: 0; flex-wrap: wrap; }
 .board-pill {
@@ -313,6 +332,7 @@ a.board-link:hover { color: var(--win-blue); text-decoration: underline; }
 .bigtask-list-name { font-size: 11px; font-weight: bold; text-align: left; }
 .bigtask-detail-title { display: flex; align-items: center; justify-content: space-between; }
 .bigtask-detail-title-right { display: flex; align-items: center; gap: 8px; }
+.bigtask-description { margin: 4px 0 8px; padding: 0 2px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
 .bigtask-detail { background: var(--content-bg); border: 1px solid #C3C8CC; padding: 10px; min-height: 200px; }
 
 .daily-task-card { border: 1px solid #C3C8CC; margin-bottom: 10px; }

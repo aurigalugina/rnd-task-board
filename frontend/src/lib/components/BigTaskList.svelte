@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { auth } from '$lib/stores/authStore';
-  import type { AssignableUser, BigTask, DailyTask } from '$lib/types';
+  import type { AssignableUser, BigTask, DailyTask, Severity } from '$lib/types';
   import VerdictBadge from './VerdictBadge.svelte';
   import DualBar from './DualBar.svelte';
   import StatCard from './StatCard.svelte';
@@ -35,6 +35,8 @@
 
   let showCreateForm = false;
   let name = '';
+  let description = '';
+  let severity: Severity = 'medium';
   let startDate = '';
   let deadline = '';
   let memberUserIds: string[] = [];
@@ -59,6 +61,8 @@
 
   let editingBigTask = false;
   let editName = '';
+  let editDescription = '';
+  let editSeverity: Severity = 'medium';
   let editStartDate = '';
   let editDeadline = '';
   let savingBigTaskEdit = false;
@@ -83,6 +87,8 @@
   async function openEditBigTask() {
     if (!activeBt) return;
     editName = activeBt.name;
+    editDescription = activeBt.description;
+    editSeverity = activeBt.severity;
     editStartDate = activeBt.start_date;
     editDeadline = activeBt.deadline;
     bigTaskEditError = '';
@@ -108,6 +114,8 @@
     try {
       const payload: Record<string, unknown> = {
         name: editName,
+        description: editDescription,
+        severity: editSeverity,
         start_date: editStartDate,
         deadline: editDeadline
       };
@@ -247,6 +255,8 @@
     try {
       const payload: Record<string, unknown> = {
         name,
+        description,
+        severity,
         start_date: startDate,
         deadline,
         member_user_ids: memberUserIds
@@ -255,6 +265,8 @@
       if (trimmed !== '') payload.baseline_pct = Number(trimmed);
       await api.post(`/boards/${boardId}/big-tasks`, payload);
       name = '';
+      description = '';
+      severity = 'medium';
       startDate = '';
       deadline = '';
       memberUserIds = [];
@@ -312,6 +324,18 @@
     const d = isDateOnly ? new Date(iso + 'T00:00:00') : new Date(iso);
     return d.toLocaleDateString('id-ID', { dateStyle: 'medium' });
   }
+  function severityBadge(s: BigTask['severity']): { label: string; cls: string } {
+    switch (s) {
+      case 'critical':
+        return { label: 'Critical', cls: 'severity-critical' };
+      case 'high':
+        return { label: 'High', cls: 'severity-high' };
+      case 'low':
+        return { label: 'Low', cls: 'severity-low' };
+      default:
+        return { label: 'Medium', cls: 'severity-medium' };
+    }
+  }
 </script>
 
 {#if loading}
@@ -357,7 +381,12 @@
           on:click={() => (selectedBtId = bt.id)}
         >
           <div class="bigtask-list-top">
-            <span class="bigtask-list-name">{bt.name}</span>
+            <span class="bigtask-list-name">
+              {#if bt.severity === 'critical' || bt.severity === 'high'}
+                <span class="severity-dot severity-dot-{bt.severity}" title="Severity: {bt.severity}"></span>
+              {/if}
+              {bt.name}
+            </span>
             <div style="display:flex;gap:4px;align-items:center">
               {#if bt.on_hold}<span class="badge badge-neutral">Di hold</span>{/if}
               <VerdictBadge verdict={bt.verdict} />
@@ -380,9 +409,11 @@
 
     <div class="bigtask-detail">
       {#if activeBt}
+        {@const sevBadge = severityBadge(activeBt.severity)}
         <div class="section-title bigtask-detail-title">
           <span>{activeBt.name} — daily task</span>
           <div class="bigtask-detail-title-right">
+            <span class="badge {sevBadge.cls}" title="Severity">{sevBadge.label}</span>
             <VerdictBadge verdict={activeBt.verdict} />
             {#if isSuperUser}
               <button class="quick-btn" on:click={openEditBigTask} title="Edit judul/tanggal"><Pencil size={12} />&nbsp;Edit</button>
@@ -426,6 +457,9 @@
             {/if}
           </div>
         </div>
+        {#if activeBt.description}
+          <p class="bigtask-description small muted">{activeBt.description}</p>
+        {/if}
         {#if actionError}<p class="small" style="color:var(--win-red)">{actionError}</p>{/if}
 
         <!-- Summary tim yang terlibat di Big Task ini (di atas daftar daily task). -->
@@ -497,6 +531,21 @@
           <div class="panel-field">
             <label class="small muted" for="bt-name">Nama big task</label>
             <input id="bt-name" class="inline-input" placeholder="Nama big task" bind:value={name} required />
+          </div>
+          <div class="panel-field">
+            <label class="small muted" for="bt-description">Deskripsi</label>
+            <textarea id="bt-description" class="inline-input inline-textarea" rows="2"
+              placeholder="Jelaskan konteks/tujuan big task ini (opsional)..."
+              bind:value={description} />
+          </div>
+          <div class="panel-field">
+            <label class="small muted" for="bt-severity">Severity</label>
+            <select id="bt-severity" class="inline-input" bind:value={severity}>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
           </div>
           <div class="panel-field">
             <span class="small muted">Rentang waktu</span>
@@ -571,6 +620,21 @@
           <div class="panel-field">
             <label class="small muted" for="bt-edit-name">Nama big task</label>
             <input id="bt-edit-name" class="inline-input" bind:value={editName} required />
+          </div>
+          <div class="panel-field">
+            <label class="small muted" for="bt-edit-description">Deskripsi</label>
+            <textarea id="bt-edit-description" class="inline-input inline-textarea" rows="2"
+              placeholder="Jelaskan konteks/tujuan big task ini (opsional)..."
+              bind:value={editDescription} />
+          </div>
+          <div class="panel-field">
+            <label class="small muted" for="bt-edit-severity">Severity</label>
+            <select id="bt-edit-severity" class="inline-input" bind:value={editSeverity}>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
           </div>
           <div class="panel-field">
             <span class="small muted">Rentang waktu</span>

@@ -39,10 +39,14 @@ export type BoardSummary = {
 
 export type Verdict = 'on_progress' | 'win' | 'lose';
 
+export type Severity = 'critical' | 'high' | 'medium' | 'low';
+
 export type BigTask = {
   id: string;
   board_id: string;
   name: string;
+  description: string;
+  severity: Severity;
   start_date: string;
   deadline: string;
   default_pic_user_id: string | null;

@@ -27,6 +27,8 @@ type BigTask struct {
 	ID                  string     `json:"id"`
 	BoardID             string     `json:"board_id"`
 	Name                string     `json:"name"`
+	Description         string     `json:"description"`
+	Severity            string     `json:"severity"`
 	StartDate           string     `json:"start_date"`
 	Deadline            string     `json:"deadline"`
 	DefaultPicUserID    *string    `json:"default_pic_user_id"`
@@ -41,6 +43,22 @@ type BigTask struct {
 	SignedAtBackdatedBy *string    `json:"signed_at_backdated_by"`
 	UpdatedBy           *string    `json:"updated_by"`
 	MemberUserIDs       []string   `json:"member_user_ids"`
+}
+
+// validSeverities -- BRD/SRS tidak mendefinisikan level severity, ini
+// keputusan produk baru 2026-09-02 (permintaan user: "critical high medium
+// low"), 4 level tetap, disimpan sebagai TEXT + CHECK constraint di DB
+// (migration 0028) supaya konsisten dgn validasi di sini. Lihat
+// decision-log-bigtask-severity-description-20260902.md.
+var validSeverities = map[string]bool{
+	"critical": true,
+	"high":     true,
+	"medium":   true,
+	"low":      true,
+}
+
+func isValidSeverity(s string) bool {
+	return validSeverities[s]
 }
 
 // computeExpectedPct menerapkan SRS FR-BRD-03: expected_pct = proporsi waktu
@@ -91,7 +109,7 @@ func (h *Handler) ListByBoard(w http.ResponseWriter, r *http.Request) {
 	boardID := chi.URLParam(r, "boardID")
 
 	rows, err := h.db.Query(r.Context(), `
-		SELECT bt.id, bt.board_id, bt.name, bt.start_date, bt.deadline,
+		SELECT bt.id, bt.board_id, bt.name, bt.description, bt.severity, bt.start_date, bt.deadline,
 		       bt.default_pic_user_id, bt.on_hold,
 		       COALESCE(agg.actual_pct, 0) AS actual_pct,
 		       so.signed_by, so.signed_at, so.signed_at_backdated_by, bt.updated_by,
@@ -132,7 +150,7 @@ func (h *Handler) ListByBoard(w http.ResponseWriter, r *http.Request) {
 		var signedBy *string
 		var signedAt *time.Time
 
-		if err := rows.Scan(&bt.ID, &bt.BoardID, &bt.Name, &startDate, &deadline,
+		if err := rows.Scan(&bt.ID, &bt.BoardID, &bt.Name, &bt.Description, &bt.Severity, &startDate, &deadline,
 			&bt.DefaultPicUserID, &bt.OnHold, &bt.ActualPct, &signedBy, &signedAt,
 			&bt.SignedAtBackdatedBy, &bt.UpdatedBy, &bt.MemberUserIDs); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -169,7 +187,7 @@ func loadBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID string) (BigTa
 	var signedAt *time.Time
 
 	err := db.QueryRow(ctx, `
-		SELECT bt.id, bt.board_id, bt.name, bt.start_date, bt.deadline,
+		SELECT bt.id, bt.board_id, bt.name, bt.description, bt.severity, bt.start_date, bt.deadline,
 		       bt.default_pic_user_id, bt.on_hold,
 		       COALESCE(agg.actual_pct, 0) AS actual_pct,
 		       so.signed_by, so.signed_at, so.signed_at_backdated_by, bt.updated_by,
@@ -193,7 +211,7 @@ func loadBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID string) (BigTa
 			GROUP BY big_task_id
 		) mem ON mem.big_task_id = bt.id
 		WHERE bt.id = $1 AND bt.deleted_at IS NULL
-	`, bigTaskID).Scan(&bt.ID, &bt.BoardID, &bt.Name, &startDate, &deadline,
+	`, bigTaskID).Scan(&bt.ID, &bt.BoardID, &bt.Name, &bt.Description, &bt.Severity, &startDate, &deadline,
 		&bt.DefaultPicUserID, &bt.OnHold, &bt.ActualPct, &signedBy, &signedAt,
 		&bt.SignedAtBackdatedBy, &bt.UpdatedBy, &bt.MemberUserIDs)
 	if err != nil {
@@ -218,6 +236,8 @@ func loadBigTask(ctx context.Context, db *pgxpool.Pool, bigTaskID string) (BigTa
 
 type createBigTaskRequest struct {
 	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	Severity         string   `json:"severity"`
 	StartDate        string   `json:"start_date"`
 	Deadline         string   `json:"deadline"`
 	DefaultPicUserID *string  `json:"default_pic_user_id"`
@@ -279,6 +299,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "baseline_pct harus 0-100", http.StatusBadRequest)
 		return
 	}
+	if req.Severity == "" {
+		req.Severity = "medium"
+	} else if !isValidSeverity(req.Severity) {
+		http.Error(w, "severity harus salah satu dari: critical, high, medium, low", http.StatusBadRequest)
+		return
+	}
 
 	id := uuid.New().String()
 	tx, err := h.db.Begin(r.Context())
@@ -289,9 +315,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	if _, err := tx.Exec(r.Context(), `
-		INSERT INTO big_tasks (id, board_id, name, start_date, deadline, default_pic_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, id, boardID, req.Name, req.StartDate, req.Deadline, req.DefaultPicUserID); err != nil {
+		INSERT INTO big_tasks (id, board_id, name, description, severity, start_date, deadline, default_pic_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, id, boardID, req.Name, req.Description, req.Severity, req.StartDate, req.Deadline, req.DefaultPicUserID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -511,9 +537,11 @@ func (h *Handler) ToggleOnHold(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateBigTaskRequest struct {
-	Name      *string `json:"name"`
-	StartDate *string `json:"start_date"`
-	Deadline  *string `json:"deadline"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Severity    *string `json:"severity"`
+	StartDate   *string `json:"start_date"`
+	Deadline    *string `json:"deadline"`
 	// BaselinePct/ClearBaseline: "Baseline Awal" -- input persentase progress
 	// yang sudah berjalan di lapangan sebelum Big Task ini dicatat di sistem
 	// (mis. migrasi data ke staging). super_user only, lihat
@@ -601,8 +629,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.Name == nil && req.StartDate == nil && req.Deadline == nil && req.BaselinePct == nil && !req.ClearBaseline {
+	if req.Name == nil && req.Description == nil && req.Severity == nil && req.StartDate == nil && req.Deadline == nil && req.BaselinePct == nil && !req.ClearBaseline {
 		http.Error(w, "tidak ada field yang diubah", http.StatusBadRequest)
+		return
+	}
+	if req.Severity != nil && !isValidSeverity(*req.Severity) {
+		http.Error(w, "severity harus salah satu dari: critical, high, medium, low", http.StatusBadRequest)
 		return
 	}
 	if req.BaselinePct != nil && (*req.BaselinePct < 0 || *req.BaselinePct > 100) {
@@ -626,12 +658,14 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.Exec(r.Context(), `
 		UPDATE big_tasks SET
 			name = COALESCE($2, name),
-			start_date = COALESCE($3, start_date),
-			deadline = COALESCE($4, deadline),
-			updated_by = $5,
+			description = COALESCE($3, description),
+			severity = COALESCE($4, severity),
+			start_date = COALESCE($5, start_date),
+			deadline = COALESCE($6, deadline),
+			updated_by = $7,
 			updated_at = now()
 		WHERE id = $1
-	`, bigTaskID, req.Name, req.StartDate, req.Deadline, userID); err != nil {
+	`, bigTaskID, req.Name, req.Description, req.Severity, req.StartDate, req.Deadline, userID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

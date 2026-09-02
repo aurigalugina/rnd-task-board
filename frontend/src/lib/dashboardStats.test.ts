@@ -7,6 +7,8 @@ function fakeBigTask(overrides: Partial<BigTask>): BigTask {
     id: 'bt-' + Math.random(),
     board_id: 'board-1',
     name: 'Tahap Analisis',
+    description: '',
+    severity: 'medium',
     start_date: '2026-08-01',
     deadline: '2026-08-20',
     default_pic_user_id: null,
