@@ -29,6 +29,9 @@ export type UserSummary = {
   // access_level ('super_user'/'regular_user') -- konsep terpisah dari roles
   // (many-to-many), lihat docs/decision-log/decision-log-hr-mapping-super-user-20260810.md.
   access_level?: string;
+  // task_scope_visibility ('self'/'team') -- 'team' = akses "lihat semua
+  // orang" (dipakai gate edit Team Today, decision-log-team-today-edit-permission-20260902.md).
+  task_scope_visibility?: string;
 };
 
 type AuthState = {

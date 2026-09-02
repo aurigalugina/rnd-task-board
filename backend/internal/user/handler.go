@@ -339,8 +339,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) loadMe(ctx context.Context, userID string) (Me, error) {
 	var m Me
 	err := h.db.QueryRow(ctx, `
-		SELECT id, display_name, initials, email, org_team, theme_preference, access_level, hr_user_id FROM users WHERE id = $1
-	`, userID).Scan(&m.ID, &m.DisplayName, &m.Initials, &m.Email, &m.OrgTeam, &m.ThemePreference, &m.AccessLevel, &m.HRUserID)
+		SELECT id, display_name, initials, email, org_team, theme_preference, access_level, task_scope_visibility, hr_user_id FROM users WHERE id = $1
+	`, userID).Scan(&m.ID, &m.DisplayName, &m.Initials, &m.Email, &m.OrgTeam, &m.ThemePreference, &m.AccessLevel, &m.TaskScopeVisibility, &m.HRUserID)
 	if err != nil {
 		return Me{}, err
 	}

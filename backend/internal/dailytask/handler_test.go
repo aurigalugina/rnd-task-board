@@ -68,3 +68,31 @@ func TestParseDateRange(t *testing.T) {
 		}
 	})
 }
+
+func TestCanEditDayEntry(t *testing.T) {
+	cases := []struct {
+		name        string
+		userID      string
+		picUserID   string
+		isSuperUser bool
+		userScope   string
+		want        bool
+	}{
+		{"pemilik entry selalu boleh, scope self", "u1", "u1", false, "self", true},
+		{"pemilik entry selalu boleh, scope team", "u1", "u1", false, "team", true},
+		{"pemilik entry selalu boleh, super_user", "u1", "u1", true, "self", true},
+		{"bukan pemilik, scope self -- DITOLAK", "u2", "u1", false, "self", false},
+		{"bukan pemilik, scope team -- boleh (akses lihat semua orang)", "u2", "u1", false, "team", true},
+		{"bukan pemilik, super_user -- boleh", "u2", "u1", true, "self", true},
+		{"bukan pemilik, super_user DAN scope team -- boleh", "u2", "u1", true, "team", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := canEditDayEntry(c.userID, c.picUserID, c.isSuperUser, c.userScope)
+			if got != c.want {
+				t.Errorf("canEditDayEntry(%q, %q, %v, %q) = %v, want %v",
+					c.userID, c.picUserID, c.isSuperUser, c.userScope, got, c.want)
+			}
+		})
+	}
+}

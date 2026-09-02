@@ -391,6 +391,19 @@ type updateDayEntryRequest struct {
 	BlockerText   *string `json:"blocker_text"`
 }
 
+// canEditDayEntry adalah logic murni di balik permission check
+// UpdateDayEntry -- diekstrak supaya testable tanpa DB. Aturan: pemilik
+// (PIC daily task) entry ini SELALU boleh edit; selain itu, boleh edit
+// HANYA kalau user punya akses "lihat semua orang" (super_user, atau
+// task_scope_visibility='team'). User scope='self' yang bukan pemilik
+// DITOLAK. Lihat decision-log-team-today-edit-permission-20260902.md.
+func canEditDayEntry(userID, picUserID string, isSuperUser bool, userScope string) bool {
+	if userID == picUserID {
+		return true
+	}
+	return isSuperUser || userScope == "team"
+}
+
 // UpdateDayEntry mengimplementasikan PATCH /day-entries/{day_entry_id} —
 // interaksi inline cepat tanpa form terpisah (SRS FR-DLY-05). `progress_pct`
 // 0-100 menggantikan `is_done` boolean lama -- 0="Belum", 100="Selesai",
@@ -399,8 +412,33 @@ type updateDayEntryRequest struct {
 // `realisasi_text` (2026-09-01) -- catatan realisasi aktual di lapangan,
 // terpisah dari `planned_text` (rencana) -- lihat
 // decision-log-day-entry-realisasi-field-20260901.md.
+//
+// Permission check (2026-09-02, dipicu oleh inline edit di Team Today):
+// lihat canEditDayEntry(). Hanya PIC daily task pemilik entry, ATAU user
+// dengan akses "lihat semua orang", yang boleh update. Lihat
+// decision-log-team-today-edit-permission-20260902.md.
 func (h *Handler) UpdateDayEntry(w http.ResponseWriter, r *http.Request) {
 	dayEntryID := chi.URLParam(r, "dayEntryID")
+	userID := auth.UserIDFromContext(r.Context())
+
+	if !auth.IsSuperUser(r.Context()) {
+		var picUserID, userScope string
+		err := h.db.QueryRow(r.Context(), `
+			SELECT dt.pic_user_id, u.task_scope_visibility
+			FROM day_entries de
+			JOIN daily_tasks dt ON dt.id = de.daily_task_id
+			JOIN users u ON u.id = $2
+			WHERE de.id = $1
+		`, dayEntryID, userID).Scan(&picUserID, &userScope)
+		if err != nil {
+			http.Error(w, "day entry tidak ditemukan", http.StatusNotFound)
+			return
+		}
+		if !canEditDayEntry(userID, picUserID, false, userScope) {
+			http.Error(w, "tidak punya akses untuk mengubah day entry ini", http.StatusForbidden)
+			return
+		}
+	}
 
 	var req updateDayEntryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

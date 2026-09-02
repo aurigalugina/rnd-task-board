@@ -28,6 +28,18 @@
   let selectedUserId = $auth.user?.id ?? '';
   $: filteredUsers = selectedUserId ? users.filter((u) => u.user_id === selectedUserId) : users;
 
+  // Gate tombol edit -- sinkron dengan permission backend
+  // (canEditDayEntry di dailytask/handler.go): pemilik entry SELALU boleh;
+  // selain itu HANYA kalau viewer punya akses "lihat semua orang"
+  // (super_user atau task_scope_visibility='team'). Dicek di CLIENT supaya
+  // tombol pensil tidak muncul utk kasus yang pasti ditolak backend (403) --
+  // pure UX, backend tetap validasi ulang (defense in depth).
+  $: canSeeAllPeople =
+    $auth.user?.access_level === 'super_user' || $auth.user?.task_scope_visibility === 'team';
+  function canEditEntry(ownerUserId: string): boolean {
+    return ownerUserId === $auth.user?.id || canSeeAllPeople;
+  }
+
   $: isToday = date === today;
 
   async function load() {
@@ -185,14 +197,16 @@
                   <span class="muted small">— {e.big_task_name} — {e.daily_task_title}</span>
                   {#if !isEditing}
                     <span class="badge {pb.cls}" style="margin-left:auto">{pb.label}</span>
-                    <button
-                      class="icon-btn team-today-edit-btn"
-                      aria-label="Update task ini"
-                      title="Update Rencana/Realisasi/Progress"
-                      on:click={() => startEdit(e)}
-                    >
-                      <Pencil size={12} />
-                    </button>
+                    {#if canEditEntry(u.user_id)}
+                      <button
+                        class="icon-btn team-today-edit-btn"
+                        aria-label="Update task ini"
+                        title="Update Rencana/Realisasi/Progress"
+                        on:click={() => startEdit(e)}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    {/if}
                   {/if}
                 </div>
 
