@@ -15,7 +15,38 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Session lifecycle (refresh access token / force logout) SENGAJA didaftarkan
+// dari authStore.ts, bukan diimplementasikan di sini -- client.ts cuma urusan
+// HTTP mechanics, authStore.ts yang punya state sesi (writable store, cache
+// sessionStorage, dst). Menghindari circular import (authStore.ts sudah
+// import `api` dari file ini) sekaligus pemisahan tanggung jawab yang jelas.
+type SessionHandlers = {
+  // refresh() harus resolve access token BARU (dan sudah memanggil
+  // setAccessToken sendiri), atau reject kalau refresh token juga sudah mati.
+  refresh: () => Promise<string>;
+  // onExpired() dipanggil SEKALI ketika refresh gagal -- authStore.ts pakai
+  // ini buat bersihkan state & set status 'unauthenticated' (redirect ke
+  // /login diurus +layout.svelte yang react ke status itu).
+  onExpired: () => void;
+};
+let sessionHandlers: SessionHandlers | null = null;
+export function setSessionHandlers(handlers: SessionHandlers) {
+  sessionHandlers = handlers;
+}
+
+// Endpoint yang TIDAK BOLEH memicu alur refresh-and-retry di bawah -- 401 di
+// /auth/login berarti kredensial salah (bukan token expired), 401 di
+// /auth/refresh atau /auth/logout berarti refresh token ITU SENDIRI yang
+// sudah mati (retry lewat refresh() lagi cuma bikin loop).
+const AUTH_BYPASS_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout'];
+
+// Dedup refresh -- kalau beberapa request nembak bersamaan pas access token
+// baru saja expired, semua 401 itu HARUS menunggu satu panggilan
+// /auth/refresh yang sama (bukan masing-masing manggil refresh sendiri-sendiri,
+// yang berpotensi race/redundant network call).
+let refreshPromise: Promise<string> | null = null;
+
+async function request<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
   // FormData (upload multipart) harus TANPA Content-Type manual — browser yang
   // set header itu sendiri termasuk boundary-nya, kalau di-override jadi rusak.
   const isFormData = options.body instanceof FormData;
@@ -31,6 +62,26 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...(options.headers ?? {})
     }
   });
+
+  // Access token expired di tengah sesi (umur 2 jam, lihat auth.go
+  // accessTokenTTL) -- coba refresh SEKALI pakai refresh token cookie, lalu
+  // retry request asli dengan token baru. Kalau refresh-nya sendiri gagal
+  // (refresh token juga expired/dicabut), forceLogout via onExpired() supaya
+  // user diarahkan ke /login alih-alih macet dengan error samar di halaman
+  // yang sama. isRetry mencegah retry berulang (max 1x per request).
+  if (res.status === 401 && !isRetry && sessionHandlers && !AUTH_BYPASS_PATHS.includes(path)) {
+    try {
+      if (!refreshPromise) refreshPromise = sessionHandlers.refresh();
+      const newToken = await refreshPromise;
+      refreshPromise = null;
+      accessToken = newToken;
+      return request<T>(path, options, true);
+    } catch {
+      refreshPromise = null;
+      sessionHandlers.onExpired();
+      throw new Error('Sesi habis, silakan login ulang.');
+    }
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);

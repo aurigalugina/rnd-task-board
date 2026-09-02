@@ -7,18 +7,19 @@
   let error: string | null = null;
   let submitting = false;
 
+  // Kalau user sampai ke sini karena session expired (bukan logout manual
+  // atau baru pertama buka app), tunjukkan alasannya -- lihat
+  // authStore.ts forceExpire()/AuthState.expiredReason.
+  $: sessionExpiredNotice = $auth.expiredReason === 'session_expired';
+
   async function handleSubmit() {
     error = null;
     submitting = true;
     try {
-      console.log('[login-page] Form submitted with email:', email);
       await auth.login(email, password);
-      console.log('[login-page] Login successful, redirecting...');
       await goto('/');
     } catch (e) {
-      const errMsg = (e as Error).message;
-      console.error('[login-page] Login failed:', errMsg, e);
-      error = errMsg;
+      error = (e as Error).message;
     } finally {
       submitting = false;
     }
@@ -38,6 +39,12 @@
   </div>
   <div class="login-body">
     <p class="muted small" style="margin:0">Masuk untuk melanjutkan ke portal R&amp;D Ops.</p>
+
+    {#if sessionExpiredNotice}
+      <p class="small" style="color:var(--win-amber); margin:0">
+        Sesi Anda sudah habis, silakan masuk kembali.
+      </p>
+    {/if}
 
     <div class="login-field">
       <span class="muted small">Email</span>
