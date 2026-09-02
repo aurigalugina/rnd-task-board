@@ -13,6 +13,7 @@
 
   let entryDate = entry?.entry_date ?? prefillDate;
   let plannedText = entry?.planned_text ?? '';
+  let realisasiText = entry?.realisasi_text ?? '';
   let blockerText = entry?.blocker_text ?? '';
   let progressPct = entry?.progress_pct ?? 0;
   let saving = false;
@@ -35,6 +36,7 @@
       if (entry) {
         await api.patch(`/day-entries/${entry.id}`, {
           planned_text: plannedText,
+          realisasi_text: realisasiText,
           progress_pct: progressPct,
           blocker_text: progressPct === 100 ? '' : blockerText,
         });
@@ -100,6 +102,13 @@
       </div>
 
       {#if entry}
+        <div class="panel-field">
+          <label class="small muted" for="de-realisasi">Realisasi</label>
+          <textarea id="de-realisasi" class="inline-input inline-textarea" rows="3"
+            placeholder="Apa yang benar-benar dikerjakan/dicapai hari ini..."
+            bind:value={realisasiText} />
+        </div>
+
         <div class="panel-field">
           <span class="small muted">Status progress</span>
           <div class="dep-group" role="group" aria-label="Status progress">

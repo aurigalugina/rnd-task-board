@@ -23,12 +23,13 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 }
 
 type DayEntry struct {
-	ID          string `json:"id"`
-	EntryDate   string `json:"entry_date"`
-	PlannedText string `json:"planned_text"`
-	ProgressPct int    `json:"progress_pct"`
-	BlockerText string `json:"blocker_text"`
-	IsWeekend   bool   `json:"is_weekend"`
+	ID            string `json:"id"`
+	EntryDate     string `json:"entry_date"`
+	PlannedText   string `json:"planned_text"`
+	RealisasiText string `json:"realisasi_text"`
+	ProgressPct   int    `json:"progress_pct"`
+	BlockerText   string `json:"blocker_text"`
+	IsWeekend     bool   `json:"is_weekend"`
 }
 
 // isWeekend menghitung indikator "lembur" dari tanggal — tidak pernah
@@ -119,7 +120,7 @@ func (h *Handler) ListByBigTask(w http.ResponseWriter, r *http.Request) {
 
 func loadDays(ctx context.Context, db *pgxpool.Pool, dailyTaskID string) ([]DayEntry, int, error) {
 	rows, err := db.Query(ctx, `
-		SELECT id, entry_date, planned_text, progress_pct, blocker_text
+		SELECT id, entry_date, planned_text, realisasi_text, progress_pct, blocker_text
 		FROM day_entries WHERE daily_task_id = $1 ORDER BY entry_date, created_at
 	`, dailyTaskID)
 	if err != nil {
@@ -132,7 +133,7 @@ func loadDays(ctx context.Context, db *pgxpool.Pool, dailyTaskID string) ([]DayE
 	for rows.Next() {
 		var d DayEntry
 		var entryDate time.Time
-		if err := rows.Scan(&d.ID, &entryDate, &d.PlannedText, &d.ProgressPct, &d.BlockerText); err != nil {
+		if err := rows.Scan(&d.ID, &entryDate, &d.PlannedText, &d.RealisasiText, &d.ProgressPct, &d.BlockerText); err != nil {
 			return nil, 0, err
 		}
 		d.EntryDate = entryDate.Format("2006-01-02")
@@ -384,9 +385,10 @@ func (h *Handler) CloneReview(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateDayEntryRequest struct {
-	PlannedText *string `json:"planned_text"`
-	ProgressPct *int    `json:"progress_pct"`
-	BlockerText *string `json:"blocker_text"`
+	PlannedText   *string `json:"planned_text"`
+	RealisasiText *string `json:"realisasi_text"`
+	ProgressPct   *int    `json:"progress_pct"`
+	BlockerText   *string `json:"blocker_text"`
 }
 
 // UpdateDayEntry mengimplementasikan PATCH /day-entries/{day_entry_id} —
@@ -394,6 +396,9 @@ type updateDayEntryRequest struct {
 // 0-100 menggantikan `is_done` boolean lama -- 0="Belum", 100="Selesai",
 // 1-99="On Progress" (turunan murni di frontend, tidak ada state tersimpan
 // terpisah). Lihat docs/decision-log/decision-log-day-entry-progress-pct-20260810.md.
+// `realisasi_text` (2026-09-01) -- catatan realisasi aktual di lapangan,
+// terpisah dari `planned_text` (rencana) -- lihat
+// decision-log-day-entry-realisasi-field-20260901.md.
 func (h *Handler) UpdateDayEntry(w http.ResponseWriter, r *http.Request) {
 	dayEntryID := chi.URLParam(r, "dayEntryID")
 
@@ -412,13 +417,14 @@ func (h *Handler) UpdateDayEntry(w http.ResponseWriter, r *http.Request) {
 	err := h.db.QueryRow(r.Context(), `
 		UPDATE day_entries SET
 			planned_text = COALESCE($2, planned_text),
-			progress_pct = COALESCE($3, progress_pct),
-			blocker_text = COALESCE($4, blocker_text),
+			realisasi_text = COALESCE($3, realisasi_text),
+			progress_pct = COALESCE($4, progress_pct),
+			blocker_text = COALESCE($5, blocker_text),
 			updated_at = now()
 		WHERE id = $1
-		RETURNING id, entry_date, planned_text, progress_pct, blocker_text
-	`, dayEntryID, req.PlannedText, req.ProgressPct, req.BlockerText).Scan(
-		&d.ID, &entryDate, &d.PlannedText, &d.ProgressPct, &d.BlockerText,
+		RETURNING id, entry_date, planned_text, realisasi_text, progress_pct, blocker_text
+	`, dayEntryID, req.PlannedText, req.RealisasiText, req.ProgressPct, req.BlockerText).Scan(
+		&d.ID, &entryDate, &d.PlannedText, &d.RealisasiText, &d.ProgressPct, &d.BlockerText,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -462,9 +468,9 @@ func (h *Handler) AddDayEntry(w http.ResponseWriter, r *http.Request) {
 	err = h.db.QueryRow(r.Context(), `
 		INSERT INTO day_entries (id, daily_task_id, entry_date, planned_text)
 		VALUES ($1, $2, $3, $4)
-		RETURNING id, entry_date, planned_text, progress_pct, blocker_text
+		RETURNING id, entry_date, planned_text, realisasi_text, progress_pct, blocker_text
 	`, uuid.New().String(), dailyTaskID, req.EntryDate, req.PlannedText).Scan(
-		&d.ID, &entryDate, &d.PlannedText, &d.ProgressPct, &d.BlockerText,
+		&d.ID, &entryDate, &d.PlannedText, &d.RealisasiText, &d.ProgressPct, &d.BlockerText,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -495,4 +501,131 @@ func (h *Handler) DeleteDayEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// TeamTodayEntry adalah satu Day Entry milik seorang user pada tanggal
+// terpilih, dilengkapi konteks board/big task/daily task supaya bisa
+// ditampilkan langsung tanpa fetch tambahan di frontend.
+type TeamTodayEntry struct {
+	DayEntryID     string `json:"day_entry_id"`
+	BoardID        string `json:"board_id"`
+	BoardName      string `json:"board_name"`
+	BigTaskID      string `json:"big_task_id"`
+	BigTaskName    string `json:"big_task_name"`
+	DailyTaskID    string `json:"daily_task_id"`
+	DailyTaskTitle string `json:"daily_task_title"`
+	PlannedText    string `json:"planned_text"`
+	RealisasiText  string `json:"realisasi_text"`
+	ProgressPct    int    `json:"progress_pct"`
+	BlockerText    string `json:"blocker_text"`
+}
+
+// TeamTodayUser mengelompokkan seluruh TeamTodayEntry milik satu user pada
+// tanggal terpilih -- satu baris per orang di /team-today, bukan satu baris
+// per entry (lihat decision-log-team-today-menu-20260901.md untuk alasan POV
+// "per orang" ini).
+type TeamTodayUser struct {
+	UserID      string           `json:"user_id"`
+	DisplayName string           `json:"display_name"`
+	Initials    string           `json:"initials"`
+	OrgTeam     string           `json:"org_team"`
+	Entries     []TeamTodayEntry `json:"entries"`
+}
+
+// TeamToday mengimplementasikan GET /team-today?date=YYYY-MM-DD -- "apa yang
+// sedang dikerjakan tim hari ini", POV per orang (bukan per board/project
+// seperti Dashboard, dan bukan per minggu seperti Weekly Plan). SEMUA user
+// terautentikasi bisa lihat SEMUA orang (transparan, sama seperti Dashboard)
+// -- keputusan eksplisit user, TIDAK di-scope task_scope_visibility seperti
+// endpoint daily-task lain. Lihat decision-log-team-today-menu-20260901.md.
+//
+// Default date = hari ini (server time) kalau param tidak diisi/tidak valid.
+// User TANPA entry di tanggal itu tetap muncul (Entries: []) supaya terlihat
+// jelas siapa yang belum update, bukan diam-diam hilang dari daftar.
+func (h *Handler) TeamToday(w http.ResponseWriter, r *http.Request) {
+	date := r.URL.Query().Get("date")
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		http.Error(w, "date wajib format YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	rows, err := h.db.Query(r.Context(), `
+		SELECT
+			u.id, u.display_name, u.initials, u.org_team,
+			de.id, b.id, b.name, bt.id, bt.name, dt.id, dt.title,
+			de.planned_text, de.realisasi_text, de.progress_pct, de.blocker_text
+		FROM users u
+		LEFT JOIN daily_tasks dt ON dt.pic_user_id = u.id
+		LEFT JOIN day_entries de ON de.daily_task_id = dt.id AND de.entry_date = $1
+		LEFT JOIN big_tasks bt ON bt.id = dt.big_task_id
+		LEFT JOIN boards b ON b.id = bt.board_id
+		ORDER BY u.display_name, b.name, bt.name, dt.title
+	`, date)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	// Preserve urutan display_name dari query (ORDER BY di atas) pakai slice
+	// + index map, bukan map biasa (urutan map di Go tidak deterministik).
+	order := []string{}
+	byUser := map[string]*TeamTodayUser{}
+
+	for rows.Next() {
+		var userID, displayName, initials, orgTeam string
+		var dayEntryID, boardID, boardName, bigTaskID, bigTaskName, dailyTaskID, dailyTaskTitle *string
+		var plannedText, realisasiText, blockerText *string
+		var progressPct *int
+		if err := rows.Scan(
+			&userID, &displayName, &initials, &orgTeam,
+			&dayEntryID, &boardID, &boardName, &bigTaskID, &bigTaskName, &dailyTaskID, &dailyTaskTitle,
+			&plannedText, &realisasiText, &progressPct, &blockerText,
+		); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		u, ok := byUser[userID]
+		if !ok {
+			u = &TeamTodayUser{UserID: userID, DisplayName: displayName, Initials: initials, OrgTeam: orgTeam, Entries: []TeamTodayEntry{}}
+			byUser[userID] = u
+			order = append(order, userID)
+		}
+
+		// LEFT JOIN tanpa match (user tidak punya daily task, atau punya tapi
+		// tidak ada entry di tanggal ini) -- dayEntryID NULL, jangan append
+		// entry kosong.
+		if dayEntryID == nil {
+			continue
+		}
+		u.Entries = append(u.Entries, TeamTodayEntry{
+			DayEntryID:     *dayEntryID,
+			BoardID:        *boardID,
+			BoardName:      *boardName,
+			BigTaskID:      *bigTaskID,
+			BigTaskName:    *bigTaskName,
+			DailyTaskID:    *dailyTaskID,
+			DailyTaskTitle: *dailyTaskTitle,
+			PlannedText:    *plannedText,
+			RealisasiText:  *realisasiText,
+			ProgressPct:    *progressPct,
+			BlockerText:    *blockerText,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	result := make([]TeamTodayUser, 0, len(order))
+	for _, userID := range order {
+		result = append(result, *byUser[userID])
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }

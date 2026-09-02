@@ -171,6 +171,7 @@ func main() {
 			protected.Post("/daily-tasks/{dailyTaskID}/day-entries", dailyTaskHandler.AddDayEntry)
 			protected.Patch("/day-entries/{dayEntryID}", dailyTaskHandler.UpdateDayEntry)
 			protected.Delete("/day-entries/{dayEntryID}", dailyTaskHandler.DeleteDayEntry)
+			protected.Get("/team-today", dailyTaskHandler.TeamToday)
 
 			protected.Get("/big-tasks/{bigTaskID}/comments", commentHandler.List)
 			protected.Post("/big-tasks/{bigTaskID}/comments", commentHandler.Create)

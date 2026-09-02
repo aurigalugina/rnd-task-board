@@ -113,6 +113,7 @@
         <nav class="tabs">
           <a class="tab-btn {$page.url.pathname === '/' ? 'tab-btn-active' : ''}" href="/">Dashboard</a>
           <a class="tab-btn {$page.url.pathname.startsWith('/boards') ? 'tab-btn-active' : ''}" href="/boards">Boards</a>
+          <a class="tab-btn {$page.url.pathname === '/team-today' ? 'tab-btn-active' : ''}" href="/team-today">Team Today</a>
           <a class="tab-btn {$page.url.pathname === '/weekly-plan' ? 'tab-btn-active' : ''}" href="/weekly-plan">My Weekly Plan</a>
           <a class="tab-btn {$page.url.pathname === '/review-queue' ? 'tab-btn-active' : ''}" href="/review-queue">
             Review queue

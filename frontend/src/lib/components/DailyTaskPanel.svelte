@@ -293,6 +293,7 @@
             <tr>
               <th>Tanggal</th>
               <th>Rencana</th>
+              <th>Realisasi</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -309,6 +310,7 @@
                   {#if isWeekendDate(day.entry_date)}<span class="lembur-badge">lembur</span>{/if}
                 </td>
                 <td class="de-planned-cell small">{day.planned_text || '—'}</td>
+                <td class="de-planned-cell small">{day.realisasi_text || '—'}</td>
                 <td><span class="badge {pb.cls}">{pb.label}</span></td>
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->

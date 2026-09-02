@@ -65,6 +65,7 @@ export type DayEntry = {
   id: string;
   entry_date: string;
   planned_text: string;
+  realisasi_text: string;
   progress_pct: number;
   blocker_text: string;
   is_weekend: boolean;
@@ -191,4 +192,28 @@ export type ChangeRequest = {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   created_at: string;
+};
+
+// GET /team-today?date=YYYY-MM-DD -- "apa yang dikerjakan tim hari ini",
+// POV per orang. Lihat decision-log-team-today-menu-20260901.md.
+export type TeamTodayEntry = {
+  day_entry_id: string;
+  board_id: string;
+  board_name: string;
+  big_task_id: string;
+  big_task_name: string;
+  daily_task_id: string;
+  daily_task_title: string;
+  planned_text: string;
+  realisasi_text: string;
+  progress_pct: number;
+  blocker_text: string;
+};
+
+export type TeamTodayUser = {
+  user_id: string;
+  display_name: string;
+  initials: string;
+  org_team: string;
+  entries: TeamTodayEntry[];
 };
